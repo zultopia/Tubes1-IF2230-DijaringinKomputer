@@ -14,7 +14,7 @@ protected:
     TCPSocket *connection;
 
 public:
-    void run();
+    virtual void run(); 
     virtual void handleMessage(void *buffer) = 0;
 };
 

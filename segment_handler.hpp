@@ -2,6 +2,7 @@
 #define segment_handler_h
 
 #include "segment.hpp"
+#include <vector>
 
 class SegmentHandler
 {
@@ -17,6 +18,9 @@ private:
     void generateSegments();
 
 public:
+    SegmentHandler();
+    ~SegmentHandler();
+    
     void setDataStream(uint8_t *dataStream, uint32_t dataSize);
     uint8_t getWindowSize();
     Segment *advanceWindow(uint8_t size);

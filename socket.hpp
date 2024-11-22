@@ -2,6 +2,8 @@
 #define socket_h
 
 #include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 #include <string>
 #include <functional>
 #include "segment.hpp"
@@ -40,16 +42,28 @@ private:
      * Socket descriptor
      */
     int32_t socket;
+    int32_t socketFd; 
 
     SegmentHandler *segmentHandler;
 
     TCPStatusEnum status;
 
+    struct sockaddr_in address; // Address structure for socket communication
+
 public:
+    TCPSocket(string ip, int32_t port);
+    ~TCPSocket();
+
     void listen();
-    void send(string ip, int32_t port, void *dataStream, uint32_t dataSize);
+    void connect(string targetIp, int32_t targetPort);
+    void send(string targetIp, int32_t targetPort, void *dataStream, uint32_t dataSize);
     int32_t recv(void *buffer, uint32_t length);
     void close();
+
+    TCPStatusEnum getStatus();
+    int32_t getSocket() const;
+    string getIp();
+    int32_t getPort();
 };
 
 #endif
