@@ -13,21 +13,21 @@ struct Segment
 
     struct
     {
-        unsigned uint8_t  data_offset : 4;
-        unsigned uint8_t  reserved : 4;
+        uint8_t  data_offset : 4;
+        uint8_t  reserved : 4;
     };
 
     struct
     {
-        unsigned uint8_t  cwr : 1;
+        uint8_t  cwr : 1;
         // todo continue ...
-        unsigned uint8_t  ece : 1;
-        unsigned uint8_t  urg : 1;
-        unsigned uint8_t  ack : 1;
-        unsigned uint8_t  psh : 1;
-        unsigned uint8_t  rst : 1;
-        unsigned uint8_t  syn : 1;
-        unsigned uint8_t  fin : 1;
+        uint8_t  ece : 1;
+        uint8_t  urg : 1;
+        uint8_t  ack : 1;
+        uint8_t  psh : 1;
+        uint8_t  rst : 1;
+        uint8_t  syn : 1;
+        uint8_t  fin : 1;
     } flags;
 
     uint16_t window;
