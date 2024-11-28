@@ -6,10 +6,10 @@
 struct Segment
 {
     uint16_t sourcePort : 16;
-    uint16_t destPort;
+    uint16_t destPort : 16;
     // todo continue
-    uint32_t seqNum;
-    uint32_t ackNum;
+    uint32_t seqNum : 32;
+    uint32_t ackNum : 32;
 
     struct
     {
@@ -46,17 +46,17 @@ const uint8_t FIN_ACK_FLAG = FIN_FLAG | ACK_FLAG;
 /**
  * Generate Segment that contain SYN packet
  */
-Segment syn(uint32_t seqNum);
+Segment syn(Segment *segment, uint32_t seqNum);
 
 /**
  * Generate Segment that contain ACK packet
  */
-Segment ack(uint32_t seqNum, uint32_t ackNum);
+Segment ack(Segment *segment, uint32_t seqNum, uint32_t ackNum);
 
 /**
  * Generate Segment that contain SYN-ACK packet
  */
-Segment synAck(uint32_t seqNum);
+Segment synAck(Segment *segment, uint32_t seqNum, uint32_t ackNum);
 
 /**
  * Generate Segment that contain FIN packet

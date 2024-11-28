@@ -1,10 +1,18 @@
 #include "tcpsocket.hpp"
+#include <fstream>
+#include <random>
 #include <iostream>
 #include <stdexcept>
 #include <cstring>
 
-TCPSocket::TCPSocket(string ip, int32_t port) : ip(ip), port(port), status(LISTEN)
-{
+TCPSocket::TCPSocket(string ip, int32_t port)
+        : ip(ip), 
+        port(port), 
+        status(LISTEN), 
+        currentSeqNum(generateRandomSeqNum()), 
+        currentAckNum(0),
+        dataStream(nullptr)
+    {
     // Create a socket with UDP (SOCK_DGRAM)
     socketFd = socket(AF_INET, SOCK_DGRAM, 0);
     if (socketFd == -1)
@@ -94,9 +102,91 @@ void TCPSocket::close()
     }
 }
 
+uint32_t TCPSocket::generateRandomSeqNum()
+{
+    uint32_t seqNum;
+    
+    // Open /dev/urandom to generate a cryptographically secure random number
+    std::ifstream urandom("/dev/urandom", std::ios::in | std::ios::binary);
+    if (!urandom)
+    {
+        throw std::runtime_error("Failed to open /dev/urandom");
+    }
+
+    // Read 4 bytes from /dev/urandom to generate a random uint32_t
+    urandom.read(reinterpret_cast<char*>(&seqNum), sizeof(seqNum));
+    if (!urandom)
+    {
+        throw std::runtime_error("Failed to read random data from /dev/urandom");
+    }
+
+    urandom.close();
+
+    return seqNum;
+}
+
+void TCPSocket::setDataStream(uint8_t *dataStream)
+{
+    if (dataStream != nullptr)
+    {
+        // Set the data stream
+        this->dataStream = static_cast<void *>(dataStream);
+    }
+    else
+    {
+        // Clear the data stream
+        this->dataStream = nullptr;
+    }
+    // this->dataSize = dataSize;
+    // this->dataIndex = 0;
+    // generate segment from data stream
+}
+
+Segment TCPSocket::generateSegmentsFromPayload(uint16_t destPort)
+{
+    // Create an empty segment
+    Segment segment = {};
+    segment.sourcePort = port;     // Local port
+    segment.destPort = destPort;  // Destination port passed as an argument
+    segment.seqNum = currentSeqNum;
+    segment.ackNum = currentAckNum;
+    segment.flags = {0};          // No flags set initially
+
+    // If a payload is present, add it to the segment
+    if (dataStream != nullptr)
+    {
+        // Allocate memory for the payload
+        size_t payloadLength = strlen(reinterpret_cast<const char *>(dataStream));
+        segment.payload = new uint8_t[payloadLength];
+        memcpy(segment.payload, dataStream, payloadLength);
+    }
+
+    // Set the checksum
+    segment = updateChecksum(segment);
+
+    return segment;
+}
+
+
+
 TCPStatusEnum TCPSocket::getStatus()
 {
     return status;
+}
+
+void TCPSocket::setStatus(TCPStatusEnum status)
+{
+    this->status = status;
+}
+
+uint32_t TCPSocket::getCurrentSeqNum()
+{
+    return currentSeqNum;
+}
+
+uint32_t TCPSocket::getCurrentAckNum()
+{
+    return currentAckNum;
 }
 
 int32_t TCPSocket::getSocket() const

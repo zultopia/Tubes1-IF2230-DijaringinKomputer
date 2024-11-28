@@ -1,4 +1,7 @@
 .vscode
+main
+*.pph
+*.ppc
 
 # Prerequisites
 *.d

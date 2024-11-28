@@ -48,6 +48,12 @@ private:
     TCPStatusEnum status;
 
     struct sockaddr_in address; // Address structure for socket communication
+
+    uint32_t currentSeqNum;
+    uint32_t currentAckNum;
+    void *dataStream;
+
+    uint32_t generateRandomSeqNum();
 public:
     TCPSocket(string ip, int32_t port);
     ~TCPSocket();
@@ -56,9 +62,15 @@ public:
     void close();
 
     TCPStatusEnum getStatus();
+    void setStatus(TCPStatusEnum status);
+    uint32_t getCurrentSeqNum();
+    uint32_t getCurrentAckNum();
     int32_t getSocket() const;
     string getIp();
     int32_t getPort();
+
+    Segment generateSegmentsFromPayload(uint16_t destPort);
+    void setDataStream(uint8_t *dataStream);
 };
 
 #endif

@@ -1,11 +1,10 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-#include "node.hpp"
-#include "socket.hpp"
+#include "tcpsocket.hpp"
 #include <string>
 
-class Server : public Node
+class Server
 {
 private:
     int32_t port;
@@ -13,11 +12,10 @@ private:
 public:
     Server(std::string ip, int32_t port);
     ~Server();
-    void run() override;
-    void handleMessage(void *buffer) override;
+    void run();
 
 private:
-    void handleClient(int32_t clientFd);
+    TCPSocket *connection;
 };
 
 #endif // SERVER_H

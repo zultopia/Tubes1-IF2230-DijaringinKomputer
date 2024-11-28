@@ -1,24 +1,21 @@
-#ifndef CLIENT_H
-#define CLIENT_H
+#ifndef Client_H
+#define Client_H
 
-#include "node.hpp"
-#include "socket.hpp"
+#include "tcpsocket.hpp"
 #include <string>
 
-class Client : public Node
+class Client
 {
 private:
-    std::string targetIp;
-    int32_t targetPort;
+    int32_t port;
 
 public:
-    Client(std::string targetIp, int32_t targetPort);
+    Client(std::string ip, int32_t port);
     ~Client();
-    void run() override;
-    void handleMessage(void *buffer) override;
+    void run();
 
 private:
-    void sendMessage(const std::string &message);
+    TCPSocket *connection;
 };
 
-#endif // CLIENT_H
+#endif

@@ -1,28 +1,27 @@
 #include "segment.hpp"
 
-Segment syn(uint32_t seqNum)
+Segment syn(Segment *segment, uint32_t seqNum)
 {
-    Segment segment = {};
-    segment.flags.syn = 1;
-    segment.seqNum = seqNum;
-    return updateChecksum(segment);
+    segment->flags.syn = 1;
+    segment->seqNum = seqNum;
+    return updateChecksum(*segment);
 }
 
-Segment ack(uint32_t seqNum, uint32_t ackNum)
+Segment ack(Segment *segment, uint32_t seqNum, uint32_t ackNum)
 {
-    Segment segment = {};
-    segment.flags.ack = 1;
-    segment.seqNum = seqNum;
-    segment.ackNum = ackNum;
-    return updateChecksum(segment);
+    segment->flags.ack = 1;
+    segment->seqNum = seqNum;
+    segment->ackNum = ackNum;
+    return updateChecksum(*segment);
 }
 
-Segment synAck(uint32_t seqNum, uint32_t ackNum)
+Segment synAck(Segment *segment, uint32_t seqNum, uint32_t ackNum)
 {
-    Segment segment = syn(seqNum);
-    segment.flags.ack = 1;
-    segment.ackNum = ackNum;
-    return updateChecksum(segment);
+    segment->flags.syn = 1;
+    segment->flags.ack = 1;
+    segment->seqNum = seqNum;
+    segment->ackNum = ackNum;
+    return updateChecksum(*segment);
 }
 
 Segment fin()
@@ -34,7 +33,8 @@ Segment fin()
 
 Segment finAck()
 {
-    Segment segment = fin();
+    Segment segment = {};
+    segment.flags.fin = 1;
     segment.flags.ack = 1;
     return updateChecksum(segment);
 }

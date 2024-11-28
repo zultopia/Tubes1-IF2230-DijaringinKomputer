@@ -1,7 +1,7 @@
 #include "server.hpp"
 #include <iostream>
-#include <thread>
 #include <unistd.h>
+#include <thread>
 
 Server::Server(std::string ip, int32_t port)
 {
@@ -11,51 +11,102 @@ Server::Server(std::string ip, int32_t port)
 
 Server::~Server()
 {
+    connection->close();
     delete connection;
 }
 
 void Server::run()
 {
-    connection->listen(); 
+    char buffer[1024]; // Buffer for receiving data
+    std::cout << "Server is waiting for incoming data..." << std::endl;
 
-    std::cout << "Server listening on port " << port << "..." << std::endl;
+    Segment *receivedSegment = nullptr; // Declare outside for reuse
+    int32_t receivedBytes = 0;
+
     while (true)
     {
-        int32_t clientFd = accept(connection->getSocket(), NULL, NULL);
-        if (clientFd == -1)
+        switch (connection->getStatus())
         {
-            std::cerr << "Failed to accept connection!" << std::endl;
-            continue;
-        }
-
-        std::cout << "New connection accepted!" << std::endl;
-
-        std::thread clientHandler(&Server::handleClient, this, clientFd);
-        clientHandler.detach();
-    }
-}
-
-void Server::handleMessage(void *buffer)
-{
-    std::string message = static_cast<char *>(buffer);
-    std::cout << "Server received message: " << message << std::endl;
-}
-
-void Server::handleClient(int32_t clientFd)
-{
-    char buffer[1024];
-    while (true)
-    {
-        int bytesRead = recv(clientFd, buffer, sizeof(buffer), 0);
-        if (bytesRead <= 0)
+        case LISTEN:
         {
-            std::cerr << "Connection closed or error while receiving data!" << std::endl;
+            // Wait for incoming SYN packets
+            receivedBytes = connection->recv(buffer, sizeof(buffer));
+            if (receivedBytes > 0)
+            {
+                receivedSegment = reinterpret_cast<Segment *>(buffer);
+
+                std::cout << "Received " << receivedBytes << " bytes from Client." << std::endl;
+
+                // Validate destination port depends on TCP Header
+                if (receivedSegment->destPort == connection->getPort())
+                {
+                    // Check if it's a SYN packet
+                    if (receivedSegment->flags.syn && !receivedSegment->flags.ack)
+                    {
+                        std::cout << "Server received: SYN packet from Client." << std::endl;
+
+                        // Prepare and send a SYN-ACK packet
+                        connection->setDataStream(nullptr); // Clear any previous data stream
+                        Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
+
+                        // SYN-ACK requires incrementing the received sequence number by 1
+                        Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum + 1);
+
+                        connection->send("127.0.0.1", receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
+                        std::cout << "Server sent SYN-ACK packet to Client." << std::endl;
+
+                        connection->setStatus(SYN_RECEIVED);
+                    }
+                }
+            }
             break;
         }
 
-        buffer[bytesRead] = '\0'; 
-        handleMessage(buffer);     
-    }
+        case SYN_RECEIVED:
+        {
+            // Wait for ACK from the client
+            receivedBytes = connection->recv(buffer, sizeof(buffer));
+            if (receivedBytes > 0)
+            {
+                receivedSegment = reinterpret_cast<Segment *>(buffer);
 
-    close(clientFd); 
+                std::cout << "Received " << receivedBytes << " bytes from Client." << std::endl;
+
+                // Validate destination port
+                if (receivedSegment->destPort == connection->getPort())
+                {
+                    // Check if it's an ACK packet
+                    if (!receivedSegment->flags.syn && receivedSegment->flags.ack)
+                    {
+                        std::cout << "Server received: ACK packet from Client." << std::endl;
+                        connection->setStatus(ESTABLISHED);
+                        std::cout << "Connection ESTABLISHED." << std::endl;
+                    }
+                }
+            }
+            break;
+        }
+
+        case ESTABLISHED:
+        {
+            std::cout << "Connection in Server established, ready to send/receive data" << std::endl;
+            // Additional logic for ESTABLISHED can go here
+            break;
+        }
+
+        case FIN_WAIT_1:
+        case FIN_WAIT_2:
+        case CLOSE_WAIT:
+        case CLOSING:
+        case LAST_ACK:
+        {
+            std::cout << "Server is in connection closing state." << std::endl;
+            break;
+        }
+
+        default:
+            std::cout << "Unknown state!" << std::endl;
+            break;
+        }
+    }
 }
