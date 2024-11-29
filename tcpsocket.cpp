@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <cstring>
 
-TCPSocket::TCPSocket(string ip, int32_t port)
+TCPSocket::TCPSocket(string ip, uint16_t port)
         : ip(ip), 
         port(port), 
         status(LISTEN), 
@@ -19,6 +19,9 @@ TCPSocket::TCPSocket(string ip, int32_t port)
     {
         throw runtime_error("Failed to create socket");
     }
+
+    // Bind the socket to the specified IP address and port
+    struct sockaddr_in address = {};
 
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
@@ -48,7 +51,7 @@ TCPSocket::~TCPSocket()
     // delete segmentHandler;
 }
 
-void TCPSocket::send(string targetIp, int32_t targetPort, void *dataStream, uint32_t dataSize)
+void TCPSocket::send(string destIp, uint16_t destPort, void *dataStream, uint32_t dataSize)
 {
     if (dataStream == nullptr || dataSize == 0)
     {
@@ -57,8 +60,8 @@ void TCPSocket::send(string targetIp, int32_t targetPort, void *dataStream, uint
 
     struct sockaddr_in targetAddress = {};
     targetAddress.sin_family = AF_INET;
-    targetAddress.sin_port = htons(targetPort);
-    if (inet_pton(AF_INET, targetIp.c_str(), &targetAddress.sin_addr) <= 0)
+    targetAddress.sin_port = htons(destPort);
+    if (inet_pton(AF_INET, destIp.c_str(), &targetAddress.sin_addr) <= 0)
     {
         throw runtime_error("Invalid target IP address");
     }
@@ -69,7 +72,7 @@ void TCPSocket::send(string targetIp, int32_t targetPort, void *dataStream, uint
         throw runtime_error("Failed to send data");
     }
 
-    std::cout << "Sent " << sentBytes << " bytes to " << targetIp << ":" << targetPort << std::endl;
+    std::cout << "Sent " << sentBytes << " bytes to " << destIp << ":" << destPort << std::endl;
 }
 
 int32_t TCPSocket::recv(void *buffer, uint32_t length)
@@ -78,10 +81,14 @@ int32_t TCPSocket::recv(void *buffer, uint32_t length)
     {
         throw runtime_error("Invalid buffer");
     }
-
-    struct sockaddr_in senderAddress = {};
+    
     socklen_t senderAddressLength = sizeof(senderAddress);
-    ssize_t receivedBytes = ::recvfrom(socketFd, buffer, length, 0, (struct sockaddr *)&senderAddress, &senderAddressLength);
+
+    // Panggil recvfrom untuk menerima data
+    ssize_t receivedBytes = ::recvfrom(socketFd, buffer, length, 0, 
+                                       reinterpret_cast<struct sockaddr *>(&senderAddress), 
+                                       &senderAddressLength);
+    
     if (receivedBytes < 0)
     {
         throw runtime_error("Failed to receive data");
@@ -189,6 +196,16 @@ uint32_t TCPSocket::getCurrentAckNum()
     return currentAckNum;
 }
 
+void TCPSocket::setCurrentSeqNum(uint32_t seqNum)
+{
+    currentSeqNum = seqNum;
+}
+
+void TCPSocket::setCurrentAckNum(uint32_t ackNum)
+{
+    currentAckNum = ackNum;
+}
+
 int32_t TCPSocket::getSocket() const
 {
     return socketFd;
@@ -199,7 +216,17 @@ string TCPSocket::getIp()
     return ip;
 }
 
-int32_t TCPSocket::getPort()
+uint16_t TCPSocket::getPort()
 {
     return port;
+}
+
+string TCPSocket::getSenderIp() const
+{
+    char ipBuffer[INET_ADDRSTRLEN]; // Buffer untuk alamat IP
+    if (inet_ntop(AF_INET, &senderAddress.sin_addr, ipBuffer, INET_ADDRSTRLEN) == nullptr)
+    {
+        throw std::runtime_error("Failed to convert sender IP to string");
+    }
+    return std::string(ipBuffer); // Kembalikan dalam format string
 }

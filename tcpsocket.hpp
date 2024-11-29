@@ -47,7 +47,7 @@ private:
 
     TCPStatusEnum status;
 
-    struct sockaddr_in address; // Address structure for socket communication
+    struct sockaddr_in senderAddress;
 
     uint32_t currentSeqNum;
     uint32_t currentAckNum;
@@ -55,9 +55,9 @@ private:
 
     uint32_t generateRandomSeqNum();
 public:
-    TCPSocket(string ip, int32_t port);
+    TCPSocket(string ip, uint16_t port);
     ~TCPSocket();
-    void send(string targetIp, int32_t targetPort, void *dataStream, uint32_t dataSize);
+    void send(string destIp, uint16_t destPort, void *dataStream, uint32_t dataSize);
     int32_t recv(void *buffer, uint32_t length);
     void close();
 
@@ -65,9 +65,12 @@ public:
     void setStatus(TCPStatusEnum status);
     uint32_t getCurrentSeqNum();
     uint32_t getCurrentAckNum();
+    void setCurrentSeqNum(uint32_t seqNum);
+    void setCurrentAckNum(uint32_t ackNum);
     int32_t getSocket() const;
     string getIp();
-    int32_t getPort();
+    uint16_t getPort();
+    string getSenderIp() const;
 
     Segment generateSegmentsFromPayload(uint16_t destPort);
     void setDataStream(uint8_t *dataStream);

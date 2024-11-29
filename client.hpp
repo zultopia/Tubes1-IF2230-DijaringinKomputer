@@ -7,12 +7,16 @@
 class Client
 {
 private:
-    int32_t port;
+    string destIP;
+    uint16_t destPort;
 
 public:
     Client(std::string ip, int32_t port);
     ~Client();
     void run();
+
+    void setDestination();
+    
 
 private:
     TCPSocket *connection;

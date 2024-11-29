@@ -2,6 +2,7 @@
 #define segment_h
 
 #include <cstdint>
+#include <string>
 
 struct Segment
 {
@@ -36,6 +37,12 @@ struct Segment
     uint16_t urgentPointer;
     uint8_t *payload;
 } __attribute__((packed));
+
+struct ReceivedPacket
+{
+    std::string senderIP; // Store sender's IP
+    int32_t receivedBytes; // Number of bytes received
+};
 
 const uint8_t FIN_FLAG = 1;
 const uint8_t SYN_FLAG = 2;

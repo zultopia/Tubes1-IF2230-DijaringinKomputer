@@ -7,10 +7,12 @@
 class Server
 {
 private:
-    int32_t port;
+    // int32_t port;
+    std::string establishedIp;
+
 
 public:
-    Server(std::string ip, int32_t port);
+    Server(std::string ip, uint16_t port);
     ~Server();
     void run();
 

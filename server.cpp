@@ -3,9 +3,10 @@
 #include <unistd.h>
 #include <thread>
 
-Server::Server(std::string ip, int32_t port)
+Server::Server(std::string ip, uint16_t port)
 {
-    this->port = port;
+    // this->port = port;
+    this->establishedIp = {0};
     this->connection = new TCPSocket(ip, port);
 }
 
@@ -45,14 +46,17 @@ void Server::run()
                     {
                         std::cout << "Server received: SYN packet from Client." << std::endl;
 
+                        // Acknowledge the SYN packet
+                        connection->setCurrentAckNum(receivedSegment->seqNum + 1); // Increment the received sequence number by 1
+
                         // Prepare and send a SYN-ACK packet
                         connection->setDataStream(nullptr); // Clear any previous data stream
                         Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
 
                         // SYN-ACK requires incrementing the received sequence number by 1
-                        Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum + 1);
+                        Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), connection->getCurrentAckNum());
 
-                        connection->send("127.0.0.1", receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
+                        connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
                         std::cout << "Server sent SYN-ACK packet to Client." << std::endl;
 
                         connection->setStatus(SYN_RECEIVED);
@@ -90,7 +94,6 @@ void Server::run()
         case ESTABLISHED:
         {
             std::cout << "Connection in Server established, ready to send/receive data" << std::endl;
-            // Additional logic for ESTABLISHED can go here
             break;
         }
 
