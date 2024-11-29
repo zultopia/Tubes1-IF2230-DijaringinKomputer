@@ -18,10 +18,13 @@ Server::~Server()
 
 void Server::run()
 {
+    std::string message = "Hello, Server!";
+
+
     char buffer[1024]; // Buffer for receiving data
     std::cout << "Server is waiting for incoming data..." << std::endl;
 
-    Segment *receivedSegment = nullptr; // Declare outside for reuse
+    Segment *receivedSegment = nullptr;
     int32_t receivedBytes = 0;
 
     while (true)
@@ -36,8 +39,6 @@ void Server::run()
             {
                 receivedSegment = reinterpret_cast<Segment *>(buffer);
 
-                std::cout << "Received " << receivedBytes << " bytes from Client." << std::endl;
-
                 // Validate destination port depends on TCP Header
                 if (receivedSegment->destPort == connection->getPort())
                 {
@@ -46,15 +47,12 @@ void Server::run()
                     {
                         std::cout << "Server received: SYN packet from Client." << std::endl;
 
-                        // Acknowledge the SYN packet
-                        connection->setCurrentAckNum(receivedSegment->seqNum + 1); // Increment the received sequence number by 1
-
                         // Prepare and send a SYN-ACK packet
                         connection->setDataStream(nullptr); // Clear any previous data stream
                         Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
 
                         // SYN-ACK requires incrementing the received sequence number by 1
-                        Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), connection->getCurrentAckNum());
+                        Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum + 1);
 
                         connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
                         std::cout << "Server sent SYN-ACK packet to Client." << std::endl;
@@ -65,7 +63,11 @@ void Server::run()
             }
             break;
         }
-
+        case SYN_SENT:
+        {
+            /* code */
+            break;
+        }
         case SYN_RECEIVED:
         {
             // Wait for ACK from the client
@@ -74,8 +76,6 @@ void Server::run()
             {
                 receivedSegment = reinterpret_cast<Segment *>(buffer);
 
-                std::cout << "Received " << receivedBytes << " bytes from Client." << std::endl;
-
                 // Validate destination port
                 if (receivedSegment->destPort == connection->getPort())
                 {
@@ -83,8 +83,11 @@ void Server::run()
                     if (!receivedSegment->flags.syn && receivedSegment->flags.ack)
                     {
                         std::cout << "Server received: ACK packet from Client." << std::endl;
+
+                        connection->setCurrentSeqNum(receivedSegment->ackNum);
+                        connection->setCurrentAckNum(receivedSegment->seqNum + 1);
+
                         connection->setStatus(ESTABLISHED);
-                        std::cout << "Connection ESTABLISHED." << std::endl;
                     }
                 }
             }
@@ -94,6 +97,8 @@ void Server::run()
         case ESTABLISHED:
         {
             std::cout << "Connection in Server established, ready to send/receive data" << std::endl;
+
+            exit(0);
             break;
         }
 

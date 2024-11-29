@@ -12,13 +12,13 @@ int main()
 
     // Create and start the server
     // ask to input the host and port
-    std::cout << "Enter the server host: ";
-    std::cin >> serverHost;
-    std::cout << "Enter the server port: ";
-    std::cin >> serverPort;
+    // std::cout << "Enter the server host: ";
+    // std::cin >> serverHost;
+    // std::cout << "Enter the server port: ";
+    // std::cin >> serverPort;
     
-    Server server(serverHost, serverPort);
-    // Server server("127.0.0.1", 8031);
+    // Server server(serverHost, serverPort);
+    Server server("127.0.0.1", 8031);
     std::thread serverThread([&server]() {
         server.run();
     });
@@ -28,14 +28,14 @@ int main()
 
     // Create and start the client
     // ask to input the host and port
-    std::cout << "Enter the client host: ";
-    std::cin >> clientHost;
-    std::cout << "Enter the client port: ";
-    std::cin >> clientPort;
+    // std::cout << "Enter the client host: ";
+    // std::cin >> clientHost;
+    // std::cout << "Enter the client port: ";
+    // std::cin >> clientPort;
 
-    Client client(clientHost, clientPort);
+    // Client client(clientHost, clientPort);
+    Client client("127.0.0.1", 8032);
     client.setDestination();
-    // Client client("127.0.0.1", 8032);
     client.run();
 
     // Join the server thread

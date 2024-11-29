@@ -51,11 +51,11 @@ TCPSocket::~TCPSocket()
     // delete segmentHandler;
 }
 
-void TCPSocket::send(string destIp, uint16_t destPort, void *dataStream, uint32_t dataSize)
+void TCPSocket::send(string destIp, uint16_t destPort, void *packet, uint32_t packetSize)
 {
-    if (dataStream == nullptr || dataSize == 0)
+    if (packet == nullptr || packetSize == 0)
     {
-        throw runtime_error("Invalid data stream");
+        throw runtime_error("Invalid packet");
     }
 
     struct sockaddr_in targetAddress = {};
@@ -66,7 +66,7 @@ void TCPSocket::send(string destIp, uint16_t destPort, void *dataStream, uint32_
         throw runtime_error("Invalid target IP address");
     }
 
-    ssize_t sentBytes = ::sendto(socketFd, dataStream, dataSize, 0, (struct sockaddr *)&targetAddress, sizeof(targetAddress));
+    ssize_t sentBytes = ::sendto(socketFd, packet, packetSize, 0, (struct sockaddr *)&targetAddress, sizeof(targetAddress));
     if (sentBytes < 0)
     {
         throw runtime_error("Failed to send data");
@@ -84,7 +84,6 @@ int32_t TCPSocket::recv(void *buffer, uint32_t length)
     
     socklen_t senderAddressLength = sizeof(senderAddress);
 
-    // Panggil recvfrom untuk menerima data
     ssize_t receivedBytes = ::recvfrom(socketFd, buffer, length, 0, 
                                        reinterpret_cast<struct sockaddr *>(&senderAddress), 
                                        &senderAddressLength);
