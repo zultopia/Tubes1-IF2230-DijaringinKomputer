@@ -5,35 +5,41 @@
 #include <stdexcept>
 #include <cstring>
 
-TCPSocket::TCPSocket(string ip, uint16_t port)
-        : ip(ip), 
-        port(port), 
-        status(LISTEN), 
-        currentSeqNum(generateRandomSeqNum()), 
-        currentAckNum(0),
-        dataStream(nullptr)
-    {
+TCPSocket::TCPSocket(std::string ip, uint16_t port)
+    : ip(ip),
+      port(port),
+      status(LISTEN),
+      currentSeqNum(generateRandomSeqNum()),
+      currentAckNum(0),
+      dataStream(nullptr)
+{
     // Create a socket with UDP (SOCK_DGRAM)
     socketFd = socket(AF_INET, SOCK_DGRAM, 0);
     if (socketFd == -1)
     {
-        throw runtime_error("Failed to create socket");
+        throw std::runtime_error("Failed to create socket");
+    }
+
+    // Set socket to non-blocking mode
+    int flags = fcntl(socketFd, F_GETFL, 0);
+    if (flags == -1 || fcntl(socketFd, F_SETFL, flags | O_NONBLOCK) == -1)
+    {
+        throw std::runtime_error("Failed to set socket to non-blocking mode");
     }
 
     // Bind the socket to the specified IP address and port
     struct sockaddr_in address = {};
-
     memset(&address, 0, sizeof(address));
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     if (inet_pton(AF_INET, ip.c_str(), &address.sin_addr) <= 0)
     {
-        throw runtime_error("Invalid IP address");
+        throw std::runtime_error("Invalid IP address");
     }
 
     if (bind(socketFd, (struct sockaddr *)&address, sizeof(address)) < 0)
     {
-        throw runtime_error("Failed to bind socket");
+        throw std::runtime_error("Failed to bind socket");
     }
 
     status = LISTEN;
@@ -71,25 +77,53 @@ void TCPSocket::send(string destIp, uint16_t destPort, void *packet, uint32_t pa
     }
 }
 
+// Receive data (non-blocking)
 int32_t TCPSocket::recv(void *buffer, uint32_t length)
 {
     if (buffer == nullptr || length == 0)
     {
-        throw runtime_error("Invalid buffer");
+        throw std::runtime_error("Invalid buffer");
     }
-    
+
     socklen_t senderAddressLength = sizeof(senderAddress);
 
-    ssize_t receivedBytes = ::recvfrom(socketFd, buffer, length, 0, 
-                                       reinterpret_cast<struct sockaddr *>(&senderAddress), 
+    ssize_t receivedBytes = ::recvfrom(socketFd, buffer, length, 0,
+                                       reinterpret_cast<struct sockaddr *>(&senderAddress),
                                        &senderAddressLength);
-    
+
     if (receivedBytes < 0)
     {
-        throw runtime_error("Failed to receive data");
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        {
+            // No data available in non-blocking mode
+            return 0;
+        }
+        else
+        {
+            throw std::runtime_error("Failed to receive data");
+        }
     }
-    
+
     return receivedBytes;
+}
+
+// Utility to check if data is available
+bool TCPSocket::isDataAvailable()
+{
+    fd_set readFds;
+    FD_ZERO(&readFds);
+    FD_SET(socketFd, &readFds);
+
+    struct timeval timeout = {0, 0}; // No timeout (immediate check)
+
+    int result = select(socketFd + 1, &readFds, nullptr, nullptr, &timeout);
+
+    if (result < 0)
+    {
+        throw std::runtime_error("Error during select");
+    }
+
+    return FD_ISSET(socketFd, &readFds);
 }
 
 void TCPSocket::close()

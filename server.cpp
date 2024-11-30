@@ -115,7 +115,7 @@ void Server::run()
 
         case ESTABLISHED:
         {
-            exit(0);
+            // exit(0);
             break;
         }
 

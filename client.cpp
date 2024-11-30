@@ -81,6 +81,8 @@ void Client::run()
                         }
                     }
                 }
+                // Wait for a short duration before retransmission
+                std::this_thread::sleep_for(std::chrono::milliseconds(connection->getWaitRetransmitTime()));
 
                 // Retransmit SYN packet
                 connection->setDataStream(nullptr);
@@ -145,6 +147,9 @@ void Client::run()
                         Segment ackSegment = ack(&segment, connection->getCurrentAckNum(), connection->getCurrentSeqNum());
 
                         connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
+
+                        // Wait for a short duration before the next retry
+                        std::this_thread::sleep_for(std::chrono::milliseconds(connection->getWaitRetransmitTime()));
                     }
                 }
 

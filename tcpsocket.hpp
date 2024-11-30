@@ -7,6 +7,8 @@
 #include <string>
 #include <functional>
 #include "segment.hpp"
+#include <fcntl.h>
+#include <netinet/in.h>
 
 using namespace std;
 
@@ -59,6 +61,7 @@ public:
     ~TCPSocket();
     void send(string destIp, uint16_t destPort, void *dataStream, uint32_t dataSize);
     int32_t recv(void *buffer, uint32_t length);
+    bool isDataAvailable();
     void close();
 
     TCPStatusEnum getStatus();
