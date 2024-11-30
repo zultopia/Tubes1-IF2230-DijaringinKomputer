@@ -45,7 +45,7 @@ void Server::run()
                     // Check if it's a SYN packet
                     if (receivedSegment->flags.syn && !receivedSegment->flags.ack)
                     {
-                        std::cout << "Server received: SYN packet from Client." << std::endl;
+                        std::cout << "[Handshake] [S=" << receivedSegment->seqNum << "] Receiving SYN request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
 
                         // Prepare and send a SYN-ACK packet
                         connection->setDataStream(nullptr); // Clear any previous data stream
@@ -55,12 +55,14 @@ void Server::run()
                         Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum + 1);
 
                         connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
-                        std::cout << "Server sent SYN-ACK packet to Client." << std::endl;
+                        
+                        std::cout << "[Handshake] [S=" << synAckSegment.seqNum << "] " << "[A=" << synAckSegment.ackNum << "] " <<  "Sending SYN-ACK request to " << this->connection->getSenderIp() << ":" << synAckSegment.destPort << std::endl;
 
                         connection->setStatus(SYN_RECEIVED);
                     }
                 }
             }
+
             break;
         }
         case SYN_SENT:
@@ -82,22 +84,37 @@ void Server::run()
                     // Check if it's an ACK packet
                     if (!receivedSegment->flags.syn && receivedSegment->flags.ack)
                     {
-                        std::cout << "Server received: ACK packet from Client." << std::endl;
+                        std::cout << "[Handshake] [A=" << receivedSegment->ackNum << "] Receiving ACK request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
+                        
+
 
                         connection->setCurrentSeqNum(receivedSegment->ackNum);
-                        connection->setCurrentAckNum(receivedSegment->seqNum + 1);
 
                         connection->setStatus(ESTABLISHED);
+
+                        std::cout << "Connection in Server established, ready to send/receive data" << std::endl;
+
+                        break;
                     }
                 }
             }
-            break;
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(connection->getWaitRetransmitTime()));
+
+            // Retransmit SYN-ACK packet
+            connection->setDataStream(nullptr); // Clear any previous data stream
+            Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
+
+            // SYN-ACK requires incrementing the received sequence number by 1
+            Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum + 1);
+
+            connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
+            std::cout << "Server sent SYN-ACK packet to Client." << std::endl;
+
         }
 
         case ESTABLISHED:
         {
-            std::cout << "Connection in Server established, ready to send/receive data" << std::endl;
-
             exit(0);
             break;
         }
@@ -109,6 +126,7 @@ void Server::run()
         case LAST_ACK:
         {
             std::cout << "Server is in connection closing state." << std::endl;
+            exit(0);
             break;
         }
 

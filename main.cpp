@@ -39,7 +39,10 @@ int main()
     client.run();
 
     // Join the server thread
-    serverThread.join();
+    // Wait for server to finish
+    if (serverThread.joinable()) {
+        serverThread.join();
+    }
 
     return 0;
 }

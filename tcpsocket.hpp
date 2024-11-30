@@ -7,7 +7,6 @@
 #include <string>
 #include <functional>
 #include "segment.hpp"
-// #include "segment_handler.hpp"
 
 using namespace std;
 
@@ -31,6 +30,7 @@ class TCPSocket
 {
     // todo add tcp connection state?
 private:
+    static constexpr uint32_t WAIT_RETRANSMIT_TIME = 500; // 500 milliseconds
     /**
      * The ip address and port for the socket instance
      * Not to be confused with ip address and port of the connected connection
@@ -71,6 +71,7 @@ public:
     string getIp();
     uint16_t getPort();
     string getSenderIp() const;
+    uint32_t getWaitRetransmitTime();
 
     Segment generateSegmentsFromPayload(uint16_t destPort);
     void setDataStream(uint8_t *dataStream);

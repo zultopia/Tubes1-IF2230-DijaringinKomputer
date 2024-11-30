@@ -34,6 +34,10 @@ void Client::run()
                 Segment segment = connection->generateSegmentsFromPayload(this->destPort);
                 Segment syncSegment = syn(&segment, connection->getCurrentSeqNum());
                 connection->send(this->destIP, this->destPort, &syncSegment, sizeof(syncSegment));
+
+                std::cout << "[Handshake] [S=" << syncSegment.seqNum << "] Sending SYN request to " << this->destIP << ":" << this->destPort << std::endl;
+
+
                 connection->setStatus(SYN_SENT);
 
                 break;
@@ -51,11 +55,9 @@ void Client::run()
                         // Check if it's an SYN+ACK packet
                         if (receivedSegment->flags.syn && receivedSegment->flags.ack)
                         {
-                            std::cout << "Client received: SYN+ACK packet from Server." << std::endl;
-
                             if (receivedSegment->ackNum == connection->getCurrentSeqNum() + 1)
                             {
-                                std::cout << "ACK number is correct." << std::endl;
+                                std::cout << "[Handshake] [S=" << receivedSegment->seqNum << "] " << "[A=" << receivedSegment->ackNum << "] " <<  "Received SYN-ACK request from " << this->destIP << ":" << this->destPort << std::endl;
 
                                 // Prepare and send a ACK packet
                                 connection->setDataStream(nullptr);
@@ -64,26 +66,30 @@ void Client::run()
                                 Segment ackSegment = ack(&segment, receivedSegment->ackNum, receivedSegment->seqNum + 1);
 
                                 connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
-                                std::cout << "Client sent ACK packet to Server." << std::endl;
-
+                                
+                                std::cout << "[Handshake] [S=" << ackSegment.seqNum << "] " << "[A=" << ackSegment.ackNum << "] " <<  "Sending ACK request to " << this->destIP << ":" << this->destPort << std::endl;
+                                
                                 connection->setStatus(ESTABLISHED);
+                                std::cout << "Connection in Client established, ready to send/receive data" << std::endl;
 
                                 break;
                             }
                             else
                             {
                                 std::cout << "ACK number is incorrect." << std::endl;
-                                break;
                             }
                         }
                     }
                 }
+
+                // Retransmit SYN packet
                 connection->setDataStream(nullptr);
 
                 Segment segment = connection->generateSegmentsFromPayload(this->destPort);
                 Segment syncSegment = syn(&segment, connection->getCurrentSeqNum());
                 connection->send(this->destIP, this->destPort, &syncSegment, sizeof(syncSegment));
-                connection->setStatus(SYN_SENT);
+
+                std::cout << "[Handshake] [S=" << syncSegment.seqNum << "] Sending SYN request to " << this->destIP << ":" << this->destPort << std::endl;
 
                 break;
             }
@@ -94,8 +100,61 @@ void Client::run()
             }
             case ESTABLISHED:
             {
-                std::cout << "Connection in Client established, ready to send/receive data" << std::endl;
-                /* code */
+                cout << "Client is in ESTABLISHED state." << endl;
+                int retryCount = 0;                // Initialize retry counter
+                constexpr int MAX_RETRIES = 5;    // Define a maximum number of retries
+                bool messageReceived = false;     // Flag to check if a real message is received
+
+                while (retryCount < MAX_RETRIES && !messageReceived)
+                {
+                    // Wait for incoming REAL MESSAGE packets
+                    receivedBytes = connection->recv(buffer, sizeof(buffer));
+                    if (receivedBytes > 0)
+                    {
+                        receivedSegment = reinterpret_cast<Segment *>(buffer);
+
+                        // Validate the received segment
+                        if (connection->getSenderIp() == this->destIP && receivedSegment->destPort == connection->getPort())
+                        {
+                            if (!receivedSegment->flags.syn && receivedSegment->flags.ack) // Real data packet (not part of handshake)
+                            {
+                                std::cout << "[Data] Received message from " << this->destIP << ":" << this->destPort << " with payload: "
+                                        << receivedSegment->payload << std::endl;
+
+                                // sending ACK
+
+                                messageReceived = true; // Message received successfully
+                                break;                  // Exit the retry loop
+                            }
+                            else
+                            {
+                                std::cout << "[Warning] Received unexpected packet during ESTABLISHED state." << std::endl;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // No packet received; handle retransmission
+                        retryCount++;
+
+                        std::cout << "[Retry] No data received. Resending ACK packet (" << retryCount << "/" << MAX_RETRIES << ")." << std::endl;
+
+                        // Prepare and resend the last ACK packet
+                        connection->setDataStream(nullptr);
+                        Segment segment = connection->generateSegmentsFromPayload(this->destPort);
+                        Segment ackSegment = ack(&segment, connection->getCurrentAckNum(), connection->getCurrentSeqNum());
+
+                        connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
+                    }
+                }
+
+                if (!messageReceived)
+                {
+                    std::cerr << "[Error] Failed to receive any messages after " << MAX_RETRIES << " retries. Connection may be lost." << std::endl;
+                    // Optionally, reset connection or handle failure here
+                    exit(1);
+                }
+
                 break;
             }
             case FIN_WAIT_1:

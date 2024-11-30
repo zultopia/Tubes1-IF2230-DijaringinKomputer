@@ -38,8 +38,6 @@ TCPSocket::TCPSocket(string ip, uint16_t port)
 
     status = LISTEN;
     std::cout << "Socket is now listening on " << ip << ":" << port << std::endl;
-
-    // segmentHandler = new SegmentHandler();
 }
 
 TCPSocket::~TCPSocket()
@@ -71,8 +69,6 @@ void TCPSocket::send(string destIp, uint16_t destPort, void *packet, uint32_t pa
     {
         throw runtime_error("Failed to send data");
     }
-
-    std::cout << "Sent " << sentBytes << " bytes to " << destIp << ":" << destPort << std::endl;
 }
 
 int32_t TCPSocket::recv(void *buffer, uint32_t length)
@@ -92,8 +88,7 @@ int32_t TCPSocket::recv(void *buffer, uint32_t length)
     {
         throw runtime_error("Failed to receive data");
     }
-
-    std::cout << "Received " << receivedBytes << " bytes" << std::endl;
+    
     return receivedBytes;
 }
 
@@ -228,4 +223,9 @@ string TCPSocket::getSenderIp() const
         throw std::runtime_error("Failed to convert sender IP to string");
     }
     return std::string(ipBuffer); // Kembalikan dalam format string
+}
+
+uint32_t TCPSocket::getWaitRetransmitTime()
+{
+    return WAIT_RETRANSMIT_TIME;
 }
