@@ -98,15 +98,31 @@ void Client::run()
             case SYN_RECEIVED:
             {
                 /* code */
+                cout << "Client is in SYN_RECEIVED state." << endl;
+
+                // Send an ACK to complete the handshake
+                Segment ackSegment;
+                ackSegment.seqNum = connection->getCurrentSeqNum();
+                ackSegment.ackNum = connection->getCurrentAckNum();
+                ackSegment.flags.ack = true;
+                ackSegment.flags.syn = true;
+
+                connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
+                
+                cout << "[ACK Sent] Transitioning to ESTABLISHED state." << endl;
+
+                // Change the state to ESTABLISHED after sending ACK
+                this->state = ESTABLISHED;
                 break;
             }
             case ESTABLISHED:
             {
                 cout << "Client is in ESTABLISHED state." << endl;
                 int retryCount = 0;                // Initialize retry counter
-                constexpr int MAX_RETRIES = 5;    // Define a maximum number of retries
-                bool messageReceived = false;     // Flag to check if a real message is received
+                constexpr int MAX_RETRIES = 5;     // Define a maximum number of retries
+                bool messageReceived = false;      // Flag to check if a real message is received
 
+                // Sending multiple segments with payload
                 while (retryCount < MAX_RETRIES && !messageReceived)
                 {
                     // Wait for incoming REAL MESSAGE packets
@@ -123,10 +139,17 @@ void Client::run()
                                 std::cout << "[Data] Received message from " << this->destIP << ":" << this->destPort << " with payload: "
                                         << receivedSegment->payload << std::endl;
 
-                                // sending ACK
+                                // Now, send a payload in response for each segment
+                                // Prepare the segment with the payload to send back
+                                connection->setDataStream(nullptr);
+                                Segment segment = connection->generateSegmentsFromPayload(this->destPort);
+                                segment.payload = "This is the client payload";  // Example payload
+                                Segment ackSegment = ack(&segment, connection->getCurrentAckNum(), connection->getCurrentSeqNum());
 
-                                messageReceived = true; // Message received successfully
-                                break;                  // Exit the retry loop
+                                connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
+
+                                messageReceived = true;  // Message received successfully
+                                break;  
                             }
                             else
                             {
@@ -165,25 +188,120 @@ void Client::run()
             case FIN_WAIT_1:
             {
                 /* code */
+                cout << "Client is in FIN_WAIT_1 state." << endl;
+
+                // Wait for an ACK or FIN from the server
+                receivedBytes = connection->recv(buffer, sizeof(buffer));
+                if (receivedBytes > 0)
+                {
+                    receivedSegment = reinterpret_cast<Segment *>(buffer);
+
+                    // If the segment is an ACK, move to FIN_WAIT_2
+                    if (receivedSegment->flags.ack)
+                    {
+                        cout << "[ACK Received] Transitioning to FIN_WAIT_2 state." << endl;
+                        this->state = FIN_WAIT_2;
+                    }
+                    else if (receivedSegment->flags.fin)
+                    {
+                        // If the segment is a FIN, send an ACK and transition to CLOSING state
+                        cout << "[FIN Received] Transitioning to CLOSING state." << endl;
+                        this->state = CLOSING;
+                        // Send an ACK to acknowledge the FIN
+                        Segment ackSegment;
+                        ackSegment.seqNum = connection->getCurrentSeqNum();
+                        ackSegment.ackNum = connection->getCurrentAckNum();
+                        ackSegment.flags.ack = true;
+                        connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
+                    }
+                }
                 break;
             }
             case FIN_WAIT_2:
             {
                 /* code */
+                cout << "Client is in FIN_WAIT_2 state." << endl;
+
+                // Wait for a FIN from the server
+                receivedBytes = connection->recv(buffer, sizeof(buffer));
+                if (receivedBytes > 0)
+                {
+                    receivedSegment = reinterpret_cast<Segment *>(buffer);
+
+                    if (receivedSegment->flags.fin)
+                    {
+                        cout << "[FIN Received] Transitioning to TIME_WAIT state." << endl;
+                        // Transition to TIME_WAIT (not shown in original, but logically follows)
+                        this->state = TIME_WAIT;
+
+                        // Send an ACK to acknowledge the FIN
+                        Segment ackSegment;
+                        ackSegment.seqNum = connection->getCurrentSeqNum();
+                        ackSegment.ackNum = connection->getCurrentAckNum();
+                        ackSegment.flags.ack = true;
+                        connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
+                    }
+                }
                 break;
             }
             case CLOSE_WAIT:
             {
                 /* code */
+                cout << "Client is in CLOSE_WAIT state." << endl;
+
+                // Send an ACK to acknowledge the received FIN
+                Segment ackSegment;
+                ackSegment.seqNum = connection->getCurrentSeqNum();
+                ackSegment.ackNum = connection->getCurrentAckNum();
+                ackSegment.flags.ack = true;
+                connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
+
+                cout << "[ACK Sent] Transitioning to LAST_ACK state." << endl;
+
+                // Transition to LAST_ACK to initiate the connection closing process
+                this->state = LAST_ACK;
                 break;
             }
             case CLOSING:
             {
                 /* code */
+                cout << "Client is in CLOSING state." << endl;
+
+                // Wait for the ACK of the FIN
+                receivedBytes = connection->recv(buffer, sizeof(buffer));
+                if (receivedBytes > 0)
+                {
+                    receivedSegment = reinterpret_cast<Segment *>(buffer);
+
+                    // If an ACK is received, transition to TIME_WAIT
+                    if (receivedSegment->flags.ack)
+                    {
+                        cout << "[ACK Received] Transitioning to TIME_WAIT state." << endl;
+                        this->state = TIME_WAIT;
+                    }
+                }
                 break;
             }
             case LAST_ACK:
             {
+                cout << "Client is in LAST_ACK state." << endl;
+
+                // Wait for the ACK of the FIN sent by the client
+                receivedBytes = connection->recv(buffer, sizeof(buffer));
+                if (receivedBytes > 0)
+                {
+                    receivedSegment = reinterpret_cast<Segment *>(buffer);
+
+                    // If an ACK is received, we can safely close the connection
+                    if (receivedSegment->flags.ack)
+                    {
+                        cout << "[ACK Received] Closing connection." << endl;
+                        // Perform any final cleanup here
+                        this->state = CLOSED; // Assuming CLOSED state after finishing the handshake
+                        // Optionally, close socket or reset connection
+                        connection->close();
+                    }
+                }
                 break;
             }
             default:
