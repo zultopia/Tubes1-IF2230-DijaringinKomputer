@@ -76,7 +76,7 @@ Segment fin();
 Segment finAck();
 
 // update return type as needed
-uint8_t *calculateChecksum(Segment segment);
+uint16_t calculateChecksum(Segment segment);
 
 /**
  * Return a new segment with a calcuated checksum fields
