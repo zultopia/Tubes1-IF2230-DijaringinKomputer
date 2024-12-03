@@ -177,23 +177,29 @@ void TCPSocket::setDataStream(uint8_t *dataStream)
     // generate segment from data stream
 }
 
-Segment TCPSocket::generateSegmentsFromPayload(uint16_t destPort)
+Segment TCPSocket::generateSegmentsFromPayload(uint16_t destPort, size_t offset)
 {
     // Create an empty segment
     Segment segment = {};
     segment.sourcePort = port;     // Local port
-    segment.destPort = destPort;  // Destination port passed as an argument
+    segment.destPort = destPort;   // Destination port passed as an argument
     segment.seqNum = currentSeqNum;
     segment.ackNum = currentAckNum;
-    segment.flags = {0};          // No flags set initially
+    segment.flags = {0};           // No flags set initially
 
-    // If a payload is present, add it to the segment
+    // Ensure dataStream is not nullptr and the offset is within a valid range
     if (dataStream != nullptr)
     {
-        // Allocate memory for the payload
-        size_t payloadLength = strlen(reinterpret_cast<const char *>(dataStream));
-        segment.payload = new uint8_t[payloadLength];
-        memcpy(segment.payload, dataStream, payloadLength);
+        segment.flags.ack = 1;
+        size_t dataLength = strlen(reinterpret_cast<const char*>(dataStream));
+
+        size_t startByte = offset;
+
+        if (startByte < dataLength)
+        {
+            size_t bytesToCopy = std::min(MAX_PAYLOAD_SIZE, dataLength - startByte);
+            memcpy(segment.payload, reinterpret_cast<uint8_t*>(dataStream) + startByte, bytesToCopy);
+        }
     }
 
     // Set the checksum

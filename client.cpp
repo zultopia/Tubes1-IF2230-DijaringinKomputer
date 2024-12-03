@@ -103,52 +103,45 @@ void Client::run()
             case ESTABLISHED:
             {
                 cout << "Client is in ESTABLISHED state." << endl;
-                int retryCount = 0;                // Initialize retry counter
-                constexpr int MAX_RETRIES = 5;    // Define a maximum number of retries
-                bool messageReceived = false;     // Flag to check if a real message is received
+                int retryCount = 0;
+                constexpr int MAX_RETRIES = 5;
+                bool messageReceived = false;
 
                 while (retryCount < MAX_RETRIES && !messageReceived)
                 {
-                    // Wait for incoming REAL MESSAGE packets
                     receivedBytes = connection->recv(buffer, sizeof(buffer));
                     if (receivedBytes > 0)
                     {
                         receivedSegment = reinterpret_cast<Segment *>(buffer);
 
-                        // Validate the received segment
-                        if (connection->getSenderIp() == this->destIP && receivedSegment->destPort == connection->getPort())
+                        if (!receivedSegment->flags.syn && receivedSegment->flags.ack)
                         {
-                            if (!receivedSegment->flags.syn && receivedSegment->flags.ack) // Real data packet (not part of handshake)
-                            {
-                                std::cout << "[Data] Received message from " << this->destIP << ":" << this->destPort << " with payload: "
-                                        << receivedSegment->payload << std::endl;
+                            std::string payloadStr(reinterpret_cast<char*>(receivedSegment->payload), MAX_PAYLOAD_SIZE);
+                            std::cout << "[Established] [S=" << receivedSegment->seqNum << "] ACKed with payload: " << payloadStr << std::endl;
 
-                                // sending ACK
+                            Segment segment = connection->generateSegmentsFromPayload(this->destPort);
+                            Segment ackSegment = ack(&segment, 0, receivedSegment->seqNum);
 
-                                messageReceived = true; // Message received successfully
-                                break;                  // Exit the retry loop
-                            }
-                            else
-                            {
-                                std::cout << "[Warning] Received unexpected packet during ESTABLISHED state." << std::endl;
-                            }
+                            connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
+                            std::cout << "[Established] [A=" << receivedSegment->seqNum << "] Sent" << std::endl;
+                        }
+                        else
+                        {
+                            std::cout << "[Warning] Received unexpected packet during ESTABLISHED state." << std::endl;
                         }
                     }
                     else
                     {
-                        // No packet received; handle retransmission
                         retryCount++;
 
                         std::cout << "[Retry] No data received. Resending ACK packet (" << retryCount << "/" << MAX_RETRIES << ")." << std::endl;
 
-                        // Prepare and resend the last ACK packet
                         connection->setDataStream(nullptr);
                         Segment segment = connection->generateSegmentsFromPayload(this->destPort);
                         Segment ackSegment = ack(&segment, connection->getCurrentAckNum(), connection->getCurrentSeqNum());
 
                         connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
 
-                        // Wait for a short duration before the next retry
                         std::this_thread::sleep_for(std::chrono::milliseconds(connection->getWaitRetransmitTime()));
                     }
                 }
@@ -156,7 +149,6 @@ void Client::run()
                 if (!messageReceived)
                 {
                     std::cerr << "[Error] Failed to receive any messages after " << MAX_RETRIES << " retries. Connection may be lost." << std::endl;
-                    // Optionally, reset connection or handle failure here
                     exit(1);
                 }
 
@@ -196,7 +188,9 @@ void Client::setDestination()
 {
     // Ask the user for the destination IP and port
     std::cout << "Enter the destination IP: ";
-    std::cin >> destIP;
+    // std::cin >> destIP;
+    destIP = "127.0.0.1";
     std::cout << "Enter the destination port: ";
-    std::cin >> destPort;
+    // std::cin >> destPort;
+    destPort = 8031;
 }

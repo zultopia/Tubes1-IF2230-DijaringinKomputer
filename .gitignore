@@ -32,7 +32,12 @@ main
 *.lib
 
 # Executables
+c
+s
+t
 *.exe
 *.out
 *.app
+
+# Tester source files
 tes.cpp
