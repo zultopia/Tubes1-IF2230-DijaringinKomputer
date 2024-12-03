@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <string>
 
+const size_t MAX_PAYLOAD_SIZE = 5;
+
 struct Segment
 {
     uint16_t sourcePort : 16;
@@ -35,7 +37,7 @@ struct Segment
     // todo continue
     uint16_t checksum;
     uint16_t urgentPointer;
-    uint8_t *payload;
+    uint8_t payload[MAX_PAYLOAD_SIZE];
 } __attribute__((packed));
 
 struct ReceivedPacket

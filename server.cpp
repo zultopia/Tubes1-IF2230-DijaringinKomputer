@@ -1,5 +1,6 @@
 #include "server.hpp"
 #include <iostream>
+#include <cstring>
 #include <unistd.h>
 #include <thread>
 
@@ -111,8 +112,6 @@ void Server::run()
                     {
                         std::cout << "[Handshake] [A=" << receivedSegment->ackNum << "] Receiving ACK request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
                         
-
-
                         connection->setCurrentSeqNum(receivedSegment->ackNum);
 
                         connection->setStatus(ESTABLISHED);
@@ -135,82 +134,106 @@ void Server::run()
 
             connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
             std::cout << "Server sent SYN-ACK packet to Client." << std::endl;
-
+            break;
         }
 
         case ESTABLISHED:
         {
-            // Vector to store received payloads
-            std::vector<std::string> messageVector;
+            std::string data = "I'm in the thick of it, everybody knows They know me where it snows, I skied in and they froze I don't know no nothin' 'bout no ice, I'm just cold Forty somethin' milli' subs or so, I've been told I'm in my prime and this ain't even final form They knocked me down, but still, my feet, they find the floor I went from living rooms straight out to sold-out tours Life's a fight, but trust, I'm ready for the war Woah-oh-oh This is how the story goes Woah-oh-oh I guess this is how the story goes I'm in the thick of it, everybody knows They know me where it snows, I skied in and they froze I don't know no nothin' 'bout no ice, I'm just cold Forty somethin' milli' subs or so, I've been told From the screen to the ring, to the pen, to the king Where's my crown? That's my bling Always drama when I ring See, I believe that if I see it in my heart Smash through the ceiling 'cause I'm reachin' for the stars Woah-oh-oh This is how the story goes Woah-oh-oh I guess this is how the story goes I'm in the thick of it, everybody knows They know me where it snows, I skied in and they froze (woo) I don't know no nothin' 'bout no ice, I'm just cold Forty somethin' milli' subs or so, I've been told Highway to heaven, I'm just cruisin' by my lone' They cast me out, left me for dead, them people cold My faith in God, mind in the sun, I'm 'bout to sow (yeah) My life is hard, I took the wheel, I cracked the code (yeah-yeah, woah-oh-oh) Ain't nobody gon' save you, man, this life will break you (yeah, woah-oh-oh) In the thick of it, this is how the story goes I'm in the thick of it, everybody knows They know me where it snows, I skied in and they froze I don't know no nothin' 'bout no ice, I'm just cold Forty somethin' milli' subs or so, I've been told I'm in the thick of it, everybody knows (everybody knows) They know me where it snows, I skied in and they froze (yeah) I don't know no nothin' 'bout no ice, I'm just cold Forty somethin' milli' subs or so, I've been told (ooh-ooh) Woah-oh-oh (nah-nah-nah-nah, ayy, ayy) This is how the story goes (nah, nah) Woah-oh-oh I guess this is how the story goes";            uint8_t* dataStream = new uint8_t[data.size() + 1];
+            memcpy(dataStream, data.c_str(), data.size() + 1);
 
-            cout << "Server is in ESTABLISHED state." << endl;
-            int retryCount = 0;               // Initialize retry counter
-            constexpr int MAX_RETRIES = 5;    // Define a maximum number of retries
-            bool messageReceived = false;     // Flag to check if a real message is received
+            connection->setDataStream(dataStream);
 
-            while (retryCount < MAX_RETRIES && !messageReceived)
-            {
-                // Wait for incoming REAL MESSAGE packets
+            size_t dataSize = data.size();
+            size_t currentIndex = 0;
+            size_t windowSize = MAX_PAYLOAD_SIZE * 5 + 1;
+            size_t LAR = connection->getCurrentSeqNum();
+            size_t LFS = connection->getCurrentSeqNum();
+            
+            connection->setCurrentSeqNum(connection->getCurrentSeqNum() + 1);
+
+            std::vector<Segment> sentSegments;
+            std::unordered_map<size_t, std::chrono::steady_clock::time_point> sentTimes;
+            
+            while (currentIndex < dataSize) {
+                while (LFS - LAR > windowSize) {
+                    std::cout << "[Established] Waiting for a free sliding window." << std::endl;
+
+                    receivedBytes = connection->recv(buffer, sizeof(buffer));
+                    if (receivedBytes > 0) {
+                        receivedSegment = reinterpret_cast<Segment *>(buffer);
+
+                        if (receivedSegment->ackNum > LAR) {
+                            std::cout << "[Established] [A=" << receivedSegment->ackNum << "] ACKed" << std::endl;
+                            LAR = receivedSegment->ackNum;
+                        }
+                    }
+
+                    // auto now = std::chrono::steady_clock::now();
+                    // for (const auto& entry : sentTimes) {
+                    //     if (std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second).count() > 5000) {
+                    //         size_t seqNum = entry.first;
+                    //         if (seqNum > LAR) {
+                    //             std::cout << "[RETRANSMIT] Retransmitting Segment [S=" << seqNum << "]" << std::endl;
+                    //             connection->send(connection->getSenderIp(), connection->getPort(), &sentSegments[seqNum - 1], sizeof(Segment));
+                    //             sentTimes[seqNum] = now;
+                    //         }
+                    //     }
+                    // }
+                }
+
+                size_t remainingData = dataSize - currentIndex;
+                size_t payloadSize = std::min(MAX_PAYLOAD_SIZE, remainingData);
+
+                Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort, currentIndex);
+
+                sentSegments.push_back(segment);
+                sentTimes[segment.seqNum] = std::chrono::steady_clock::now();
+
+                connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &segment, sizeof(segment));
+                std::cout << "[Established] [S=" << segment.seqNum << "] Sent" << std::endl;
+
+                LFS = segment.seqNum;
+
+                currentIndex += payloadSize;
+                connection->setCurrentSeqNum(connection->getCurrentSeqNum() + payloadSize);
+            }
+
+            std::cout << "[Established] All packets have been sent." << std::endl;
+
+            while (true) {
                 receivedBytes = connection->recv(buffer, sizeof(buffer));
-                if (receivedBytes > 0)
-                {
+                if (receivedBytes > 0) {
                     receivedSegment = reinterpret_cast<Segment *>(buffer);
 
-                    // Validate the received segment
-                    if (connection->getSenderIp() == this->destIP && receivedSegment->destPort == connection->getPort())
-                    {
-                        if (!receivedSegment->flags.syn && receivedSegment->flags.ack) // Real data packet (not part of handshake)
-                        {
-                            std::cout << "[Data] Received message from " << this->destIP << ":" << this->destPort << " with payload: "
-                                    << receivedSegment->payload << std::endl;
+                    if (receivedSegment->ackNum > LAR) {
+                        std::cout << "[Established] [A=" << receivedSegment->ackNum << "] ACKed" << std::endl;
+                        LAR = receivedSegment->ackNum;
 
-                            // Store the payload in the vector to maintain the order
-                            messageVector.push_back(receivedSegment->payload);
-
-                            // Acknowledge receipt of the payload
-                            Segment ackSegment = ack(receivedSegment, connection->getCurrentAckNum(), connection->getCurrentSeqNum());
-                            connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
-
-                            messageReceived = true;  // Message received successfully
-                            break;  // Exit the retry loop
-                        }
-                        else
-                        {
-                            std::cout << "[Warning] Received unexpected packet during ESTABLISHED state." << std::endl;
+                        if (LAR == LFS) {
+                            std::cout << "All packets successfully acknowledged. Closing connection." << std::endl;
+                            connection->setStatus(CLOSE_WAIT);
+                            break;
                         }
                     }
                 }
-                else
-                {
-                    // No packet received; handle retransmission
-                    retryCount++;
 
-                    std::cout << "[Retry] No data received. Resending ACK packet (" << retryCount << "/" << MAX_RETRIES << ")." << std::endl;
-
-                    // Resend the ACK
-                    Segment ackSegment = ack(receivedSegment, connection->getCurrentAckNum(), connection->getCurrentSeqNum());
-                    connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
-
-                    // Wait before retrying
-                    std::this_thread::sleep_for(std::chrono::milliseconds(connection->getWaitRetransmitTime()));
+                auto now = std::chrono::steady_clock::now();
+                for (const auto& entry : sentTimes) {
+                    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second).count() > 5000) {
+                        size_t seqNum = entry.first;
+                        if (seqNum > LAR) {
+                            std::cout << "[RETRANSMIT] Retransmitting Segment [S=" << seqNum << "]" << std::endl;
+                            connection->send(connection->getSenderIp(), connection->getPort(), &sentSegments[seqNum - 1], sizeof(Segment));
+                            sentTimes[seqNum] = now;
+                        }
+                    }
                 }
-            }
-
-            if (!messageReceived)
-            {
-                std::cerr << "[Error] Failed to receive any messages after " << MAX_RETRIES << " retries. Connection may be lost." << std::endl;
-                exit(1);
-            }
-
-            // Print all received messages in order (optional, for debugging)
-            std::cout << "[Server] All received messages in order:" << std::endl;
-            for (const auto &msg : messageVector)
-            {
-                std::cout << msg << std::endl;
             }
 
             break;
         }
+
 
         case FIN_WAIT_1:
         {

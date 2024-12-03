@@ -39,8 +39,6 @@ Segment finAck()
     return updateChecksum(segment);
 }
 
-#include <cstdint>
-
 uint16_t calculateChecksum(Segment segment) {
     uint32_t sum = 0;
 
@@ -57,7 +55,7 @@ uint16_t calculateChecksum(Segment segment) {
     sum += segment.window;
     sum += segment.urgentPointer;
 
-    for (size_t i = 0; i < 1460 / 2; i++) {
+    for (size_t i = 0; i < MAX_PAYLOAD_SIZE / 2; i++) {
         uint16_t data = (segment.payload[i * 2] << 8) | segment.payload[i * 2 + 1];
         sum += data;
     }

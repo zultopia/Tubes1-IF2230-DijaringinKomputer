@@ -76,7 +76,7 @@ public:
     string getSenderIp() const;
     uint32_t getWaitRetransmitTime();
 
-    Segment generateSegmentsFromPayload(uint16_t destPort);
+    Segment generateSegmentsFromPayload(uint16_t destPort, size_t offset = 0);
     void setDataStream(uint8_t *dataStream);
 };
 

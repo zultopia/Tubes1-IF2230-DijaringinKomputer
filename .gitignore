@@ -32,6 +32,9 @@ main
 *.lib
 
 # Executables
+c
+s
+t
 *.exe
 *.out
 *.app

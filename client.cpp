@@ -17,6 +17,7 @@ Client::~Client()
 
 void Client::run()
 {
+    std::vector<uint8_t> fullBuffer; // Buffer of all the data received
     char buffer[1024]; // Buffer for receiving data
     std::cout << "Client is ready to initiate the handshake..." << std::endl;
 
@@ -118,70 +119,46 @@ void Client::run()
             case ESTABLISHED:
             {
                 cout << "Client is in ESTABLISHED state." << endl;
-                int retryCount = 0;                // Initialize retry counter
-                constexpr int MAX_RETRIES = 5;     // Define a maximum number of retries
-                bool messageReceived = false;      // Flag to check if a real message is received
 
-                // Sending multiple segments with payload
-                while (retryCount < MAX_RETRIES && !messageReceived)
+                auto startTime = std::chrono::steady_clock::now();  // Record start time
+                
+                while (true)
                 {
-                    // Wait for incoming REAL MESSAGE packets
                     receivedBytes = connection->recv(buffer, sizeof(buffer));
                     if (receivedBytes > 0)
                     {
                         receivedSegment = reinterpret_cast<Segment *>(buffer);
 
-                        // Validate the received segment
-                        if (connection->getSenderIp() == this->destIP && receivedSegment->destPort == connection->getPort())
+                        if (!receivedSegment->flags.syn && receivedSegment->flags.ack)
                         {
-                            if (!receivedSegment->flags.syn && receivedSegment->flags.ack) // Real data packet (not part of handshake)
-                            {
-                                std::cout << "[Data] Received message from " << this->destIP << ":" << this->destPort << " with payload: "
-                                        << receivedSegment->payload << std::endl;
+                            std::string payloadStr(reinterpret_cast<char*>(receivedSegment->payload), MAX_PAYLOAD_SIZE);
+                            fullBuffer.insert(fullBuffer.end(), receivedSegment->payload, receivedSegment->payload + MAX_PAYLOAD_SIZE);
 
-                                // Now, send a payload in response for each segment
-                                // Prepare the segment with the payload to send back
-                                connection->setDataStream(nullptr);
-                                Segment segment = connection->generateSegmentsFromPayload(this->destPort);
-                                segment.payload = "This is the client payload";  // Example payload
-                                Segment ackSegment = ack(&segment, connection->getCurrentAckNum(), connection->getCurrentSeqNum());
+                            std::cout << "[Established] [S=" << receivedSegment->seqNum << "] ACKed with payload: " << payloadStr << std::endl;
 
-                                connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
+                            Segment segment = connection->generateSegmentsFromPayload(this->destPort);
+                            Segment ackSegment = ack(&segment, 0, receivedSegment->seqNum);
 
-                                messageReceived = true;  // Message received successfully
-                                break;  
-                            }
-                            else
-                            {
-                                std::cout << "[Warning] Received unexpected packet during ESTABLISHED state." << std::endl;
-                            }
+                            connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
+                            std::cout << "[Established] [A=" << receivedSegment->seqNum << "] Sent" << std::endl;
+                        }
+                        else
+                        {
+                            std::cout << "[Warning] Received unexpected packet during ESTABLISHED state." << std::endl;
                         }
                     }
-                    else
+
+                    auto elapsedTime = std::chrono::steady_clock::now() - startTime;
+                    if (std::chrono::duration_cast<std::chrono::seconds>(elapsedTime).count() >= 3)
                     {
-                        // No packet received; handle retransmission
-                        retryCount++;
-
-                        std::cout << "[Retry] No data received. Resending ACK packet (" << retryCount << "/" << MAX_RETRIES << ")." << std::endl;
-
-                        // Prepare and resend the last ACK packet
-                        connection->setDataStream(nullptr);
-                        Segment segment = connection->generateSegmentsFromPayload(this->destPort);
-                        Segment ackSegment = ack(&segment, connection->getCurrentAckNum(), connection->getCurrentSeqNum());
-
-                        connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
-
-                        // Wait for a short duration before the next retry
-                        std::this_thread::sleep_for(std::chrono::milliseconds(connection->getWaitRetransmitTime()));
+                        std::cout << "[Timeout] No message received within 5 seconds. Exiting..." << std::endl;
+                        break;
                     }
                 }
 
-                if (!messageReceived)
-                {
-                    std::cerr << "[Error] Failed to receive any messages after " << MAX_RETRIES << " retries. Connection may be lost." << std::endl;
-                    // Optionally, reset connection or handle failure here
-                    exit(1);
-                }
+                std::string str(fullBuffer.begin(), fullBuffer.end());
+                std::cout << "fullBuffer content as string: " << str << std::endl;
+                exit(1);
 
                 break;
             }
@@ -314,7 +291,9 @@ void Client::setDestination()
 {
     // Ask the user for the destination IP and port
     std::cout << "Enter the destination IP: ";
-    std::cin >> destIP;
+    // std::cin >> destIP;
+    destIP = "127.0.0.1";
     std::cout << "Enter the destination port: ";
-    std::cin >> destPort;
+    // std::cin >> destPort;
+    destPort = 8031;
 }
