@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <string>
 
-const size_t MAX_PAYLOAD_SIZE = 20;
+const size_t MAX_PAYLOAD_SIZE = 5;
 
 struct Segment
 {

@@ -17,6 +17,7 @@ Client::~Client()
 
 void Client::run()
 {
+    std::vector<uint8_t> fullBuffer; // Buffer of all the data received
     char buffer[1024]; // Buffer for receiving data
     std::cout << "Client is ready to initiate the handshake..." << std::endl;
 
@@ -103,11 +104,10 @@ void Client::run()
             case ESTABLISHED:
             {
                 cout << "Client is in ESTABLISHED state." << endl;
-                int retryCount = 0;
-                constexpr int MAX_RETRIES = 5;
-                bool messageReceived = false;
 
-                while (retryCount < MAX_RETRIES && !messageReceived)
+                auto startTime = std::chrono::steady_clock::now();  // Record start time
+                
+                while (true)
                 {
                     receivedBytes = connection->recv(buffer, sizeof(buffer));
                     if (receivedBytes > 0)
@@ -117,6 +117,8 @@ void Client::run()
                         if (!receivedSegment->flags.syn && receivedSegment->flags.ack)
                         {
                             std::string payloadStr(reinterpret_cast<char*>(receivedSegment->payload), MAX_PAYLOAD_SIZE);
+                            fullBuffer.insert(fullBuffer.end(), receivedSegment->payload, receivedSegment->payload + MAX_PAYLOAD_SIZE);
+
                             std::cout << "[Established] [S=" << receivedSegment->seqNum << "] ACKed with payload: " << payloadStr << std::endl;
 
                             Segment segment = connection->generateSegmentsFromPayload(this->destPort);
@@ -130,27 +132,18 @@ void Client::run()
                             std::cout << "[Warning] Received unexpected packet during ESTABLISHED state." << std::endl;
                         }
                     }
-                    else
+
+                    auto elapsedTime = std::chrono::steady_clock::now() - startTime;
+                    if (std::chrono::duration_cast<std::chrono::seconds>(elapsedTime).count() >= 3)
                     {
-                        retryCount++;
-
-                        std::cout << "[Retry] No data received. Resending ACK packet (" << retryCount << "/" << MAX_RETRIES << ")." << std::endl;
-
-                        connection->setDataStream(nullptr);
-                        Segment segment = connection->generateSegmentsFromPayload(this->destPort);
-                        Segment ackSegment = ack(&segment, connection->getCurrentAckNum(), connection->getCurrentSeqNum());
-
-                        connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
-
-                        std::this_thread::sleep_for(std::chrono::milliseconds(connection->getWaitRetransmitTime()));
+                        std::cout << "[Timeout] No message received within 5 seconds. Exiting..." << std::endl;
+                        break;
                     }
                 }
 
-                if (!messageReceived)
-                {
-                    std::cerr << "[Error] Failed to receive any messages after " << MAX_RETRIES << " retries. Connection may be lost." << std::endl;
-                    exit(1);
-                }
+                std::string str(fullBuffer.begin(), fullBuffer.end());
+                std::cout << "fullBuffer content as string: " << str << std::endl;
+                exit(1);
 
                 break;
             }
