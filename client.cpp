@@ -51,7 +51,7 @@ void Client::run()
                 {
                     receivedSegment = reinterpret_cast<Segment *>(buffer);
                     // Check if the destination port in segment is the same as this socket's port
-                    if (connection->getSenderIp() == this->destIP && receivedSegment->destPort == connection->getPort())
+                    if (receivedSegment->destPort == connection->getPort())
                     {
                         // Check if it's an SYN+ACK packet
                         if (receivedSegment->flags.syn && receivedSegment->flags.ack)
@@ -71,6 +71,8 @@ void Client::run()
                                 std::cout << "[Handshake] [S=" << ackSegment.seqNum << "] " << "[A=" << ackSegment.ackNum << "] " <<  "Sending ACK request to " << this->destIP << ":" << this->destPort << std::endl;
                                 
                                 connection->setStatus(ESTABLISHED);
+                                connection->setRetryAttempt(0);
+                                
                                 std::cout << "Connection in Client established, ready to send/receive data" << std::endl;
 
                                 break;
@@ -82,17 +84,23 @@ void Client::run()
                         }
                     }
                 }
-                // Wait for a short duration before retransmission
-                std::this_thread::sleep_for(std::chrono::milliseconds(connection->getWaitRetransmitTime()));
 
-                // Retransmit SYN packet
-                connection->setDataStream(nullptr);
+                // Since we didn't receive the expected ACK, we will retransmit the SYN packet
+                // Back to LISTEN state
+                connection->setStatus(LISTEN);
+                connection->setRetryAttempt(this->connection->getRetryAttempt() + 1);
+                
+                // // Wait for a short duration before retransmission
+                // std::this_thread::sleep_for(std::chrono::milliseconds(connection->getWaitRetransmitTime()));
 
-                Segment segment = connection->generateSegmentsFromPayload(this->destPort);
-                Segment syncSegment = syn(&segment, connection->getCurrentSeqNum());
-                connection->send(this->destIP, this->destPort, &syncSegment, sizeof(syncSegment));
+                // // Retransmit SYN packet
+                // connection->setDataStream(nullptr);
 
-                std::cout << "[Handshake] [S=" << syncSegment.seqNum << "] Sending SYN request to " << this->destIP << ":" << this->destPort << std::endl;
+                // Segment segment = connection->generateSegmentsFromPayload(this->destPort);
+                // Segment syncSegment = syn(&segment, connection->getCurrentSeqNum());
+                // connection->send(this->destIP, this->destPort, &syncSegment, sizeof(syncSegment));
+
+                // std::cout << "[Handshake] [S=" << syncSegment.seqNum << "] Sending SYN request to " << this->destIP << ":" << this->destPort << std::endl;
 
                 break;
             }

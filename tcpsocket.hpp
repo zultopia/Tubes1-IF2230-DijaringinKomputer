@@ -33,6 +33,7 @@ class TCPSocket
     // todo add tcp connection state?
 private:
     static constexpr uint32_t WAIT_RETRANSMIT_TIME = 500; // 500 milliseconds
+    static constexpr uint32_t MAX_RETRIES = 5;
     /**
      * The ip address and port for the socket instance
      * Not to be confused with ip address and port of the connected connection
@@ -56,6 +57,8 @@ private:
     void *dataStream;
 
     uint32_t generateRandomSeqNum();
+
+    uint32_t retryAttempt;
 public:
     TCPSocket(string ip, uint16_t port);
     ~TCPSocket();
@@ -75,6 +78,9 @@ public:
     uint16_t getPort();
     string getSenderIp() const;
     uint32_t getWaitRetransmitTime();
+    uint32_t getMaxRetries();
+    uint32_t getRetryAttempt();
+    void setRetryAttempt(uint32_t retryAttempt);
 
     Segment generateSegmentsFromPayload(uint16_t destPort, size_t offset = 0);
     void setDataStream(uint8_t *dataStream);

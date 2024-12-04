@@ -11,7 +11,8 @@ TCPSocket::TCPSocket(std::string ip, uint16_t port)
       status(LISTEN),
       currentSeqNum(generateRandomSeqNum()),
       currentAckNum(0),
-      dataStream(nullptr)
+      dataStream(nullptr),
+      retryAttempt(0)
 {
     // Create a socket with UDP (SOCK_DGRAM)
     socketFd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -57,6 +58,12 @@ TCPSocket::~TCPSocket()
 
 void TCPSocket::send(string destIp, uint16_t destPort, void *packet, uint32_t packetSize)
 {
+    if (this->getRetryAttempt() >= this->getMaxRetries())
+    {
+        throw std::runtime_error("Max retries reached");
+        exit(1);
+    }
+
     if (packet == nullptr || packetSize == 0)
     {
         throw runtime_error("Invalid packet");
@@ -70,6 +77,10 @@ void TCPSocket::send(string destIp, uint16_t destPort, void *packet, uint32_t pa
         throw runtime_error("Invalid target IP address");
     }
 
+    if (this->getRetryAttempt() != 0){
+        std::cout << "Retransmitting packet " << this->getRetryAttempt() << "/" << this->getMaxRetries() << std::endl;
+    }
+
     ssize_t sentBytes = ::sendto(socketFd, packet, packetSize, 0, (struct sockaddr *)&targetAddress, sizeof(targetAddress));
     if (sentBytes < 0)
     {
@@ -80,6 +91,8 @@ void TCPSocket::send(string destIp, uint16_t destPort, void *packet, uint32_t pa
 // Receive data (non-blocking)
 int32_t TCPSocket::recv(void *buffer, uint32_t length)
 {
+    // sleep 500ms
+    usleep(300000);
     if (buffer == nullptr || length == 0)
     {
         throw std::runtime_error("Invalid buffer");
@@ -268,4 +281,17 @@ string TCPSocket::getSenderIp() const
 uint32_t TCPSocket::getWaitRetransmitTime()
 {
     return WAIT_RETRANSMIT_TIME;
+}
+
+uint32_t TCPSocket::getMaxRetries()
+{
+    return MAX_RETRIES;
+}
+
+void TCPSocket::setRetryAttempt(uint32_t retryAttempt){
+    this->retryAttempt = retryAttempt;
+}
+
+uint32_t TCPSocket::getRetryAttempt(){
+    return retryAttempt;
 }

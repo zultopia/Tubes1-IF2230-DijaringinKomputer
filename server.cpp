@@ -50,18 +50,26 @@ void Server::run()
                     {
                         std::cout << "[Handshake] [S=" << receivedSegment->seqNum << "] Receiving SYN request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
 
-                        // Prepare and send a SYN-ACK packet
-                        connection->setDataStream(nullptr); // Clear any previous data stream
-                        Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
+                        // PINJAM STATE UNTUK RETRANSMIT
+                        connection->setStatus(SYN_SENT);
+                        connection->setRetryAttempt(0);
 
-                        // SYN-ACK requires incrementing the received sequence number by 1
-                        Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum + 1);
-
-                        connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
+                        // // Prepare and send a SYN-ACK packet
+                        // connection->setDataStream(nullptr); // Clear any previous data stream
                         
-                        std::cout << "[Handshake] [S=" << synAckSegment.seqNum << "] " << "[A=" << synAckSegment.ackNum << "] " <<  "Sending SYN-ACK request to " << this->connection->getSenderIp() << ":" << synAckSegment.destPort << std::endl;
+                        // Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
 
-                        connection->setStatus(SYN_RECEIVED);
+                        // // SYN-ACK requires incrementing the received sequence number by 1
+                        // Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum + 1);
+
+                        // connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
+                        
+                        // std::cout << "[Handshake] [S=" << synAckSegment.seqNum << "] " << "[A=" << synAckSegment.ackNum << "] " <<  "Sending SYN-ACK request to " << this->connection->getSenderIp() << ":" << synAckSegment.destPort << std::endl;
+
+                        // connection->setStatus(SYN_RECEIVED);
+                        // connection->setRetryAttempt(0);
+
+                        // break;
                     }
                 }
             }
@@ -70,6 +78,20 @@ void Server::run()
         }
         case SYN_SENT:
         {
+            // Prepare and send a SYN-ACK packet
+            connection->setDataStream(nullptr); // Clear any previous data stream
+            
+            Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
+
+            // SYN-ACK requires incrementing the received sequence number by 1
+            Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum + 1);
+
+            connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
+            
+            std::cout << "[Handshake] [S=" << synAckSegment.seqNum << "] " << "[A=" << synAckSegment.ackNum << "] " <<  "Sending SYN-ACK request to " << this->connection->getSenderIp() << ":" << synAckSegment.destPort << std::endl;
+
+            connection->setStatus(SYN_RECEIVED);
+
             break;
         }
         case SYN_RECEIVED:
@@ -99,17 +121,22 @@ void Server::run()
                 }
             }
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(connection->getWaitRetransmitTime()));
+            // Since we didn't receive the expected ACK, we will retransmit the SYN-ACK packet
+            connection->setStatus(SYN_SENT);
+            connection->setRetryAttempt(this->connection->getRetryAttempt() + 1);
 
-            // Retransmit SYN-ACK packet
-            connection->setDataStream(nullptr); // Clear any previous data stream
-            Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
+            // std::this_thread::sleep_for(std::chrono::milliseconds(connection->getWaitRetransmitTime()));
 
-            // SYN-ACK requires incrementing the received sequence number by 1
-            Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum + 1);
+            // // Retransmit SYN-ACK packet
+            // connection->setDataStream(nullptr); // Clear any previous data stream
+            // Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
 
-            connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
-            std::cout << "Server sent SYN-ACK packet to Client." << std::endl;
+            // // SYN-ACK requires incrementing the received sequence number by 1
+            // Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum + 1);
+
+            // connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
+            // std::cout << "Server sent SYN-ACK packet to Client." << std::endl;
+
             break;
         }
 
