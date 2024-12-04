@@ -121,7 +121,7 @@ void Server::run()
 
             size_t dataSize = data.size();
             size_t currentIndex = 0;
-            size_t windowSize = MAX_PAYLOAD_SIZE * 5 + 1;
+            size_t windowSize = (MAX_32_BIT - (MAX_PAYLOAD_SIZE + 1));
             size_t LAR = connection->getCurrentSeqNum();
             size_t LFS = connection->getCurrentSeqNum();
             
@@ -192,18 +192,17 @@ void Server::run()
                         }
                     }
                 }
-
-                auto now = std::chrono::steady_clock::now();
-                for (const auto& entry : sentTimes) {
-                    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second).count() > 5000) {
-                        size_t seqNum = entry.first;
-                        if (seqNum > LAR) {
-                            std::cout << "[RETRANSMIT] Retransmitting Segment [S=" << seqNum << "]" << std::endl;
-                            connection->send(connection->getSenderIp(), connection->getPort(), &sentSegments[seqNum - 1], sizeof(Segment));
-                            sentTimes[seqNum] = now;
-                        }
-                    }
-                }
+                // auto now = std::chrono::steady_clock::now();
+                // for (const auto& entry : sentTimes) {
+                //     if (std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second).count() > 5000) {
+                //         size_t seqNum = entry.first;
+                //         if (seqNum > LAR) {
+                //             std::cout << "[RETRANSMIT] Retransmitting Segment [S=" << seqNum << "]" << std::endl;
+                //             connection->send(connection->getSenderIp(), connection->getPort(), &sentSegments[seqNum - 1], sizeof(Segment));
+                //             sentTimes[seqNum] = now;
+                //         }
+                //     }
+                // }
             }
 
             break;

@@ -104,7 +104,14 @@ void Client::run()
             {
                 cout << "Client is in ESTABLISHED state." << endl;
 
-                auto startTime = std::chrono::steady_clock::now();  // Record start time
+                auto startTime = std::chrono::steady_clock::now();
+
+                size_t windowSize = MAX_PAYLOAD_SIZE;
+                size_t LAF = 0;
+                size_t LFR = 0;
+                size_t seqNumAck = 0;
+                
+                std::vector<Segment> waitingSegments;
                 
                 while (true)
                 {
@@ -115,16 +122,34 @@ void Client::run()
 
                         if (!receivedSegment->flags.syn && receivedSegment->flags.ack)
                         {
-                            std::string payloadStr(reinterpret_cast<char*>(receivedSegment->payload), MAX_PAYLOAD_SIZE);
-                            fullBuffer.insert(fullBuffer.end(), receivedSegment->payload, receivedSegment->payload + MAX_PAYLOAD_SIZE);
+                            if (LAF == 0) {
+                                LFR = receivedSegment->seqNum - 1;
+                                LAF = LFR + windowSize;
+                                seqNumAck = receivedSegment->seqNum;
+                            }
 
-                            std::cout << "[Established] [S=" << receivedSegment->seqNum << "] ACKed with payload: " << payloadStr << std::endl;
+                            if (LFR < receivedSegment->seqNum && receivedSegment->seqNum <= LAF) {
+                                seqNumAck = receivedSegment->seqNum;
+                                LFR = seqNumAck;
+                                LAF = LFR + windowSize;
+                                
+                                size_t payloadSize = 0;
+                                for (; payloadSize < MAX_PAYLOAD_SIZE; ++payloadSize) {
+                                    if (receivedSegment->payload[payloadSize] == '\0') {
+                                        break;
+                                    }
+                                }
+                                std::string payloadStr(reinterpret_cast<char*>(receivedSegment->payload), payloadSize);
+                                fullBuffer.insert(fullBuffer.end(), receivedSegment->payload, receivedSegment->payload + payloadSize);
 
-                            Segment segment = connection->generateSegmentsFromPayload(this->destPort);
-                            Segment ackSegment = ack(&segment, 0, receivedSegment->seqNum);
+                                std::cout << "[Established] [S=" << receivedSegment->seqNum << "] ACKed with payload: " << payloadStr << std::endl;
 
-                            connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
-                            std::cout << "[Established] [A=" << receivedSegment->seqNum << "] Sent" << std::endl;
+                                Segment segment = connection->generateSegmentsFromPayload(this->destPort);
+                                Segment ackSegment = ack(&segment, 0, receivedSegment->seqNum);
+
+                                connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
+                                std::cout << "[Established] [A=" << receivedSegment->seqNum << "] Sent" << std::endl;
+                            }
                         }
                         else
                         {

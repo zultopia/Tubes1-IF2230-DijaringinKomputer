@@ -4,7 +4,8 @@
 #include <cstdint>
 #include <string>
 
-const size_t MAX_PAYLOAD_SIZE = 5;
+const size_t MAX_PAYLOAD_SIZE = 1460;
+const size_t MAX_32_BIT = 4294967295;
 
 struct Segment
 {
@@ -38,6 +39,10 @@ struct Segment
     uint16_t checksum;
     uint16_t urgentPointer;
     uint8_t payload[MAX_PAYLOAD_SIZE];
+
+    bool operator<(const Segment& other) const {
+        return seqNum < other.seqNum;
+    }
 } __attribute__((packed));
 
 struct ReceivedPacket
