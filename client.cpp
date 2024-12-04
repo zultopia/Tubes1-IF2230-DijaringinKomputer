@@ -18,7 +18,7 @@ Client::~Client()
 void Client::run()
 {
     std::vector<uint8_t> fullBuffer; // Buffer of all the data received
-    char buffer[1024]; // Buffer for receiving data
+    char buffer[2048]; // Buffer for receiving data
     std::cout << "Client is ready to initiate the handshake..." << std::endl;
 
     Segment *receivedSegment = nullptr;
@@ -116,6 +116,10 @@ void Client::run()
                 while (true)
                 {
                     receivedBytes = connection->recv(buffer, sizeof(buffer));
+                    if (!isValidChecksum(*receivedSegment)) {
+                        std::cout << "[Warning] Received packet with invalid checksum." << std::endl;
+                        continue;
+                    }
                     if (receivedBytes > 0)
                     {
                         receivedSegment = reinterpret_cast<Segment *>(buffer);
@@ -268,9 +272,9 @@ void Client::setDestination()
 {
     // Ask the user for the destination IP and port
     std::cout << "Enter the destination IP: ";
-    // std::cin >> destIP;
-    destIP = "127.0.0.1";
+    std::cin >> destIP;
+    // destIP = "127.0.0.1";
     std::cout << "Enter the destination port: ";
-    // std::cin >> destPort;
-    destPort = 8031;
+    std::cin >> destPort;
+    // destPort = 8031;
 }

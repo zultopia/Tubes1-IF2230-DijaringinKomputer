@@ -8,6 +8,7 @@ int main() {
 
     // Create and start the server
     Server server("127.0.0.1", 8031);
+    server.setData("Tes");
     server.run();
 
     return 0;

@@ -9,6 +9,7 @@ Server::Server(std::string ip, uint16_t port)
     // this->port = port;
     this->establishedIp = {0};
     this->connection = new TCPSocket(ip, port);
+    this->data = "";
 }
 
 Server::~Server()
@@ -17,11 +18,12 @@ Server::~Server()
     delete connection;
 }
 
+void Server::setData(const std::string& dt) {
+    data = dt;
+}
+
 void Server::run()
 {
-    std::string message = "Hello, Server!";
-
-
     char buffer[1024]; // Buffer for receiving data
     std::cout << "Server is waiting for incoming data..." << std::endl;
 
@@ -113,7 +115,6 @@ void Server::run()
 
         case ESTABLISHED:
         {
-            std::string data = "I'm in(ooh-ooh) Woah-oh-oh (nah-nah-nah-nah, ayy, ayy) This is how the story goes (nah, nah) Woah-oh-oh I guess this is how the story goes";        
             uint8_t* dataStream = new uint8_t[data.size() + 1];
             memcpy(dataStream, data.c_str(), data.size() + 1);
 
