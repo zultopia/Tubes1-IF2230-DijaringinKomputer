@@ -25,7 +25,7 @@ void Server::setData(const std::string& dt) {
 void Server::run()
 {
     char buffer[1024]; // Buffer for receiving data
-    std::cout << "Server is waiting for incoming data..." << std::endl;
+    std::cout <<  Color::color("[~] Server is waiting for incoming data...", Color::MAGENTA) << std::endl;
 
     Segment *receivedSegment = nullptr;
     int32_t receivedBytes = 0;
@@ -50,7 +50,7 @@ void Server::run()
                     {
                         connection->setCurrentAckNum(receivedSegment->seqNum + 1);
 
-                        std::cout << "[Handshake] [S=" << receivedSegment->seqNum << "] Receiving SYN request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
+                        std::cout << Color::color("[i] [Handshake]", Color::YELLOW) << "[S=" << receivedSegment->seqNum << "] Receiving SYN request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
 
                         // PINJAM STATE UNTUK RETRANSMIT
                         connection->setStatus(SYN_SENT);
@@ -90,7 +90,7 @@ void Server::run()
 
             connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
             
-            std::cout << "[Handshake] [S=" << synAckSegment.seqNum << "] " << "[A=" << synAckSegment.ackNum << "] " <<  "Sending SYN-ACK request to " << this->connection->getSenderIp() << ":" << synAckSegment.destPort << std::endl;
+            std::cout << Color::color("[i] [Handshake]", Color::YELLOW) << "[S=" << synAckSegment.seqNum << "] " << "[A=" << synAckSegment.ackNum << "] " <<  "Sending SYN-ACK request to " << this->connection->getSenderIp() << ":" << synAckSegment.destPort << std::endl;
 
             connection->setStatus(SYN_RECEIVED);
 
@@ -112,7 +112,7 @@ void Server::run()
                     {
                         connection->setCurrentSeqNum(receivedSegment->ackNum);
 
-                        std::cout << "[Handshake] [A=" << receivedSegment->ackNum << "] Receiving ACK request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
+                        std::cout << Color::color("[i] [Handshake]", Color::YELLOW) << "[A=" << receivedSegment->ackNum << "] Receiving ACK request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
 
                         connection->setStatus(ESTABLISHED);
 

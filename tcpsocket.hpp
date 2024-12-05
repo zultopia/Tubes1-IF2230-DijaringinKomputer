@@ -1,6 +1,7 @@
 #ifndef tcpsocket_h
 #define tcpsocket_h
 
+#include "color.hpp"
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>

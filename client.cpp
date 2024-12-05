@@ -19,7 +19,7 @@ void Client::run()
 {
     std::vector<uint8_t> fullBuffer; // Buffer of all the data received
     char buffer[2048]; // Buffer for receiving data
-    std::cout << "Client is ready to initiate the handshake..." << std::endl;
+    std::cout << Color::color("Client is ready to initiate the handshake...", Color::MAGENTA) << std::endl;
 
     Segment *receivedSegment = nullptr;
     int32_t receivedBytes = 0;
@@ -36,7 +36,7 @@ void Client::run()
                 Segment syncSegment = syn(&segment, connection->getCurrentSeqNum());
                 connection->send(this->destIP, this->destPort, &syncSegment, sizeof(syncSegment));
 
-                std::cout << "[Handshake] [S=" << syncSegment.seqNum << "] Sending SYN request to " << this->destIP << ":" << this->destPort << std::endl;
+                std::cout << Color::color("[i] [Handshake]", Color::YELLOW) << "[S=" << syncSegment.seqNum << "] Sending SYN request to " << this->destIP << ":" << this->destPort << std::endl;
 
 
                 connection->setStatus(SYN_SENT);
@@ -61,7 +61,7 @@ void Client::run()
                                 connection->setCurrentSeqNum(receivedSegment->ackNum);
                                 connection->setCurrentAckNum(receivedSegment->seqNum + 1);
 
-                                std::cout << "[Handshake] [S=" << receivedSegment->seqNum << "] " << "[A=" << receivedSegment->ackNum << "] " <<  "Received SYN-ACK request from " << this->destIP << ":" << this->destPort << std::endl;
+                                std::cout << Color::color("[i] [Handshake]", Color::YELLOW) << "[S=" << receivedSegment->seqNum << "] " << "[A=" << receivedSegment->ackNum << "] " <<  "Received SYN-ACK request from " << this->destIP << ":" << this->destPort << std::endl;
 
                                 // PINJAM STATE UNTUK RETRANSMIT
                                 connection->setStatus(SYN_RECEIVED);
@@ -120,7 +120,7 @@ void Client::run()
 
                 connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
                 
-                std::cout << "[Handshake] [S=" << ackSegment.seqNum << "] " << "[A=" << ackSegment.ackNum << "] " <<  "Sending ACK request to " << this->destIP << ":" << this->destPort << std::endl;
+                std::cout << Color::color("[i] [Handshake]", Color::YELLOW) << "[S=" << ackSegment.seqNum << "] " << "[A=" << ackSegment.ackNum << "] " <<  "Sending ACK request to " << this->destIP << ":" << this->destPort << std::endl;
                 
                 connection->setStatus(ESTABLISHED);
 
@@ -350,11 +350,10 @@ void Client::run()
 
 void Client::setDestination()
 {
-    // Ask the user for the destination IP and port
-    std::cout << "Enter the destination IP: ";
+    std::cout << Color::color("[?] Enter the destination IP: ", Color::CYAN);
     std::cin >> destIP;
     // destIP = "127.0.0.1";
-    std::cout << "Enter the destination port: ";
+    std::cout << Color::color("[?] Enter the destination port: ", Color::CYAN);
     std::cin >> destPort;
     // destPort = 8031;
 }

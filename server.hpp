@@ -1,6 +1,7 @@
 #ifndef SERVER_H
 #define SERVER_H
 
+#include "color.hpp"
 #include "tcpsocket.hpp"
 #include <string>
 

@@ -1,6 +1,7 @@
 #ifndef Client_H
 #define Client_H
 
+#include "color.hpp"
 #include "tcpsocket.hpp"
 #include <string>
 

@@ -44,7 +44,7 @@ TCPSocket::TCPSocket(std::string ip, uint16_t port)
     }
 
     status = LISTEN;
-    std::cout << "Socket is now listening on " << ip << ":" << port << std::endl;
+    std::cout <<  Color::color("[i] Socket is now listening on ", Color::YELLOW) << ip << ":" << port << std::endl;
 }
 
 TCPSocket::~TCPSocket()
@@ -78,7 +78,9 @@ void TCPSocket::send(string destIp, uint16_t destPort, void *packet, uint32_t pa
     }
 
     if (this->getRetryAttempt() != 0){
-        std::cout << "Retransmitting packet " << this->getRetryAttempt() << "/" << this->getMaxRetries() << std::endl;
+        std::cout << Color::color("[~] Retransmitting packet " + std::to_string(this->getRetryAttempt()) + 
+    "/" + std::to_string(this->getMaxRetries()), Color::MAGENTA) << std::endl;
+
     }
 
     ssize_t sentBytes = ::sendto(socketFd, packet, packetSize, 0, (struct sockaddr *)&targetAddress, sizeof(targetAddress));
@@ -146,7 +148,7 @@ void TCPSocket::close()
         ::close(socketFd);
         socketFd = -1;
         status = LAST_ACK;
-        std::cout << "Socket closed" << std::endl;
+        std::cout << Color::color("Socket closed", Color::YELLOW) << std::endl;
     }
 }
 
