@@ -168,9 +168,9 @@ void Server::run()
                     if (receivedBytes > 0) {
                         receivedSegment = reinterpret_cast<Segment *>(buffer);
 
-                        if (receivedSegment->ackNum > LAR) {
+                        if (receivedSegment->seqNum > LAR) {
                             std::cout << "[Established] [A=" << receivedSegment->ackNum << "] ACKed" << std::endl;
-                            LAR = receivedSegment->ackNum;
+                            LAR = receivedSegment->seqNum;
                         }
                     }
 
@@ -215,9 +215,9 @@ void Server::run()
                 if (receivedBytes > 0) {
                     receivedSegment = reinterpret_cast<Segment *>(buffer);
 
-                    if (receivedSegment->ackNum > LAR) {
+                    if (receivedSegment->seqNum > LAR) {
                         std::cout << "[Established] [A=" << receivedSegment->ackNum << "] ACKed" << std::endl;
-                        LAR = receivedSegment->ackNum;
+                        LAR = receivedSegment->seqNum;
 
                         if (LAR == LFS) {
                             std::cout << "All packets successfully acknowledged. Closing connection." << std::endl;

@@ -167,21 +167,26 @@ void Client::run()
                                 LAF = LFR + windowSize;
                                 
                                 size_t payloadSize = 0;
-                                for (; payloadSize < MAX_PAYLOAD_SIZE; ++payloadSize) {
-                                    if (receivedSegment->payload[payloadSize] == '\0') {
-                                        break;
+                                if (receivedSegment->flags.fin) {
+                                    for (; payloadSize < MAX_PAYLOAD_SIZE; ++payloadSize) {
+                                        if (receivedSegment->payload[payloadSize] == '\0') {
+                                            break;
+                                        }
                                     }
+                                } else {
+                                    payloadSize = MAX_PAYLOAD_SIZE;
                                 }
+
                                 std::string payloadStr(reinterpret_cast<char*>(receivedSegment->payload), payloadSize);
                                 fullBuffer.insert(fullBuffer.end(), receivedSegment->payload, receivedSegment->payload + payloadSize);
 
                                 std::cout << "[Established] [S=" << receivedSegment->seqNum << "] ACKed with payload: " << payloadStr << std::endl;
 
                                 Segment segment = connection->generateSegmentsFromPayload(this->destPort);
-                                Segment ackSegment = ack(&segment, 0, receivedSegment->seqNum);
+                                Segment ackSegment = ack(&segment, receivedSegment->seqNum, receivedSegment->seqNum + payloadSize);
 
                                 connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
-                                std::cout << "[Established] [A=" << receivedSegment->seqNum << "] Sent" << std::endl;
+                                std::cout << "[Established] [A=" << ackSegment.ackNum << "] Sent" << std::endl;
 
                                 if (receivedSegment->flags.fin) {
                                     std::string str(fullBuffer.begin(), fullBuffer.end());
