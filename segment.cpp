@@ -24,19 +24,21 @@ Segment synAck(Segment *segment, uint32_t seqNum, uint32_t ackNum)
     return updateChecksum(*segment);
 }
 
-Segment fin()
+Segment fin(Segment *segment, uint32_t seqNum, uint32_t ackNum)
 {
-    Segment segment = {};
-    segment.flags.fin = 1;
-    return updateChecksum(segment);
+    segment->flags.fin = 1;
+    segment->seqNum = seqNum;
+    segment->ackNum = ackNum;
+    return updateChecksum(*segment);
 }
 
-Segment finAck()
+Segment finAck(Segment *segment, uint32_t seqNum, uint32_t ackNum)
 {
-    Segment segment = {};
-    segment.flags.fin = 1;
-    segment.flags.ack = 1;
-    return updateChecksum(segment);
+    segment->flags.fin = 1;
+    segment->flags.ack = 1;
+    segment->seqNum = seqNum;
+    segment->ackNum = ackNum;
+    return updateChecksum(*segment);
 }
 
 uint16_t calculateChecksum(Segment segment) {

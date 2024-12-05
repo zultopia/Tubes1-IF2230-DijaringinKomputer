@@ -215,7 +215,7 @@ void Server::run()
 
                         if (LAR == LFS) {
                             std::cout << "All packets successfully acknowledged. Closing connection." << std::endl;
-                            connection->setStatus(CLOSE_WAIT);
+                            connection->setStatus(FIN_WAIT_1);
                             break;
                         }
                     }
@@ -239,6 +239,21 @@ void Server::run()
 
         case FIN_WAIT_1:
         {
+            // Prepare and send a FIN packet
+            connection->setDataStream(nullptr); // Clear any previous data stream
+            
+            Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
+
+            // FIN-ACK requires WITHOUT incrementing the received sequence number by 1
+            Segment finSegment = fin(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum);
+
+            connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &finSegment, sizeof(finSegment));
+            
+            std::cout << "[Closing] [S=" << finSegment.seqNum << "] " << "[A=" << finSegment.ackNum << "] " <<  "Sending FIN request to " << this->connection->getSenderIp() << ":" << finSegment.destPort << std::endl;
+
+            connection->setStatus(CLOSING);
+            connection->setRetryAttempt(0);
+            
             break;
         }
 
@@ -249,56 +264,59 @@ void Server::run()
 
         case CLOSE_WAIT:
         {
-            // std::cout << "Server is in CLOSE_WAIT state." << std::endl;
-
-            // // Wait for an ACK from the client to complete the connection termination
-            // receivedBytes = connection->recv(buffer, sizeof(buffer));
-            // if (receivedBytes > 0)
-            // {
-            //     receivedSegment = reinterpret_cast<Segment *>(buffer);
-
-            //     // Send an ACK to acknowledge the FIN from the client
-            //     if (receivedSegment->flags.fin)
-            //     {
-            //         std::cout << "[FIN Received] Sending ACK and transitioning to LAST_ACK state." << std::endl;
-            //         Segment ackSegment;
-            //         ackSegment.seqNum = connection->getCurrentSeqNum();
-            //         ackSegment.ackNum = connection->getCurrentAckNum();
-            //         ackSegment.flags.ack = true;
-
-            //         connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
-
-            //         // Transition to LAST_ACK
-            //         this->state = LAST_ACK;
-            //     }
-            // }
             break;
         }
 
         case CLOSING:
         {
+            // Wait for FIN from the client
+            receivedBytes = connection->recv(buffer, sizeof(buffer));
+            if (receivedBytes > 0)
+            {
+                receivedSegment = reinterpret_cast<Segment *>(buffer);
+
+                // Validate destination port
+                if (receivedSegment->destPort == connection->getPort())
+                {
+                    // Check if it's an FIN-ACK packet
+                    if (!receivedSegment->flags.syn && receivedSegment->flags.ack && receivedSegment->flags.fin)
+                    {
+                        std::cout << "[CLOSING] [S=" << receivedSegment->seqNum << "] Receiving FIN-ACK request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
+                        
+                        connection->setCurrentSeqNum(receivedSegment->ackNum);
+                        connection->setStatus(LAST_ACK);
+                        connection->setRetryAttempt(0);
+
+                        break;
+                    }
+                }
+            }
+
+            connection->setStatus(FIN_WAIT_1);
+            connection->setRetryAttempt(connection->getRetryAttempt() + 1);
+            
             break;
         }
 
         case LAST_ACK:
         {
-            // std::cout << "Server is in LAST_ACK state." << std::endl;
+            // Prepare and send a ACK packet
+            connection->setDataStream(nullptr); // Clear any previous data stream
+            
+            Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
 
-            // // Wait for the final ACK from the client after sending the FIN
-            // receivedBytes = connection->recv(buffer, sizeof(buffer));
-            // if (receivedBytes > 0)
-            // {
-            //     receivedSegment = reinterpret_cast<Segment *>(buffer);
+            // ACK request requires incrementing the received sequence number by 1
+            Segment ackSegment = ack(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum + 1);
+            
+            for (int i = 0; i < connection->getMaxRetries(); ++i) {
+                connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
+            }
+            
+            std::cout << "[Closing] [S=" << ackSegment.seqNum << "] " << "[A=" << ackSegment.ackNum << "] " <<  "Sending ACK request to " << this->connection->getSenderIp() << ":" << ackSegment.destPort << std::endl;
 
-            //     // If an ACK is received, we can safely close the connection
-            //     if (receivedSegment->flags.ack)
-            //     {
-            //         std::cout << "[ACK Received] Closing the connection." << std::endl;
-            //         // Close connection or perform any final cleanup
-            //         connection->close();
-            //         exit(0); // Exit since the connection is closed
-            //     }
-            // }
+            cout << "Server Connection closed successfully." << endl;
+            exit(0);
+            
             break;
         }
 

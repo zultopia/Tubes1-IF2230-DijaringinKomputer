@@ -60,21 +60,24 @@ void Client::run()
                             {
                                 std::cout << "[Handshake] [S=" << receivedSegment->seqNum << "] " << "[A=" << receivedSegment->ackNum << "] " <<  "Received SYN-ACK request from " << this->destIP << ":" << this->destPort << std::endl;
 
-                                // Prepare and send a ACK packet
-                                connection->setDataStream(nullptr);
-
-                                Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
-                                Segment ackSegment = ack(&segment, receivedSegment->ackNum, receivedSegment->seqNum + 1);
-
-                                connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
-                                
-                                std::cout << "[Handshake] [S=" << ackSegment.seqNum << "] " << "[A=" << ackSegment.ackNum << "] " <<  "Sending ACK request to " << this->destIP << ":" << this->destPort << std::endl;
-                                
-                                connection->setStatus(ESTABLISHED);
+                                // PINJAM STATE UNTUK RETRANSMIT
+                                connection->setStatus(SYN_RECEIVED);
                                 connection->setRetryAttempt(0);
-                                
-                                std::cout << "Connection in Client established, ready to send/receive data" << std::endl;
 
+                                // // Prepare and send a ACK packet
+                                // connection->setDataStream(nullptr);
+
+                                // Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
+                                // Segment ackSegment = ack(&segment, receivedSegment->ackNum, receivedSegment->seqNum + 1);
+
+                                // connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
+                                
+                                // std::cout << "[Handshake] [S=" << ackSegment.seqNum << "] " << "[A=" << ackSegment.ackNum << "] " <<  "Sending ACK request to " << this->destIP << ":" << this->destPort << std::endl;
+                                
+                                // connection->setStatus(ESTABLISHED);
+                                // connection->setRetryAttempt(0);
+
+                                // std::cout << "Connection in Client established, ready to send/receive data" << std::endl;
                                 break;
                             }
                             else
@@ -106,12 +109,24 @@ void Client::run()
             }
             case SYN_RECEIVED:
             {
+                // Prepare and send a ACK packet
+                connection->setDataStream(nullptr);
+
+                Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
+                Segment ackSegment = ack(&segment, receivedSegment->ackNum, receivedSegment->seqNum + 1);
+
+                connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
+                
+                std::cout << "[Handshake] [S=" << ackSegment.seqNum << "] " << "[A=" << ackSegment.ackNum << "] " <<  "Sending ACK request to " << this->destIP << ":" << this->destPort << std::endl;
+                
+                connection->setStatus(ESTABLISHED);
+
+                std::cout << "Connection in Client established, ready to send/receive data" << std::endl;
+
                 break;
             }
             case ESTABLISHED:
             {
-                cout << "Client is in ESTABLISHED state." << endl;
-
                 auto startTime = std::chrono::steady_clock::now();
 
                 size_t windowSize = MAX_PAYLOAD_SIZE;
@@ -163,87 +178,95 @@ void Client::run()
                                 std::cout << "[Established] [A=" << receivedSegment->seqNum << "] Sent" << std::endl;
                             }
                         }
-                        else
-                        {
-                            std::cout << "[Warning] Received unexpected packet during ESTABLISHED state." << std::endl;
-                        }
+                        // else
+                        // {
+                        //     std::cout << "[Warning] Received unexpected packet during ESTABLISHED state." << std::endl;
+                        // }
                     }
 
                     auto elapsedTime = std::chrono::steady_clock::now() - startTime;
                     if (std::chrono::duration_cast<std::chrono::seconds>(elapsedTime).count() >= 3)
                     {
-                        std::cout << "[Timeout] No message received within 5 seconds. Exiting..." << std::endl;
-                        break;
+                        std::string receivedPayload(fullBuffer.begin(), fullBuffer.end());
+
+                        if (receivedPayload.length() == 0)
+                        {
+                            cout << "It seems like the server not established yetc" << endl;
+                            connection->setStatus(SYN_RECEIVED);
+                            connection->setRetryAttempt(connection->getRetryAttempt() + 1);
+                            break;
+                        }
+                        else{
+                            std::cout << "[Timeout] No message received within 5 seconds." << std::endl;
+
+                            std::cout << "Trying to chek FIN packet in FIN_WAIT_2 state" << std::endl;
+                            connection->setStatus(FIN_WAIT_2);
+                            connection->setRetryAttempt(0);
+                            break;
+
+                            break;
+                        }
                     }
                 }
 
                 std::string str(fullBuffer.begin(), fullBuffer.end());
                 std::cout << "fullBuffer content as string: " << str << std::endl;
-                exit(1);
+                
+                connection->setStatus(FIN_WAIT_2);
+                connection->setRetryAttempt(0);
 
                 break;
             }
             case FIN_WAIT_1:
             {
-                // /* code */
-                // cout << "Client is in FIN_WAIT_1 state." << endl;
-
-                // // Wait for an ACK or FIN from the server
-                // receivedBytes = connection->recv(buffer, sizeof(buffer));
-                // if (receivedBytes > 0)
-                // {
-                //     receivedSegment = reinterpret_cast<Segment *>(buffer);
-
-                //     // If the segment is an ACK, move to FIN_WAIT_2
-                //     if (receivedSegment->flags.ack)
-                //     {
-                //         cout << "[ACK Received] Transitioning to FIN_WAIT_2 state." << endl;
-                //         this->state = FIN_WAIT_2;
-                //     }
-                //     else if (receivedSegment->flags.fin)
-                //     {
-                //         // If the segment is a FIN, send an ACK and transition to CLOSING state
-                //         cout << "[FIN Received] Transitioning to CLOSING state." << endl;
-                //         this->state = CLOSING;
-                //         // Send an ACK to acknowledge the FIN
-                //         Segment ackSegment;
-                //         ackSegment.seqNum = connection->getCurrentSeqNum();
-                //         ackSegment.ackNum = connection->getCurrentAckNum();
-                //         ackSegment.flags.ack = true;
-                //         connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
-                //     }
-                // }
-                // break;
+                break;
             }
             case FIN_WAIT_2:
             {
-                // /* code */
-                // cout << "Client is in FIN_WAIT_2 state." << endl;
+                // Wait for FIN from the client
+                receivedBytes = connection->recv(buffer, sizeof(buffer));
+                if (receivedBytes > 0)
+                {
+                    receivedSegment = reinterpret_cast<Segment *>(buffer);
 
-                // // Wait for a FIN from the server
-                // receivedBytes = connection->recv(buffer, sizeof(buffer));
-                // if (receivedBytes > 0)
-                // {
-                //     receivedSegment = reinterpret_cast<Segment *>(buffer);
+                    // Validate destination port
+                    if (receivedSegment->destPort == connection->getPort())
+                    {
+                        // Check if it's an FIN packet
+                        if (!receivedSegment->flags.syn && !receivedSegment->flags.ack && receivedSegment->flags.fin)
+                        {
+                            std::cout << "[CLOSING] [S=" << receivedSegment->seqNum << "] Receiving FIN request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
+                            
+                            connection->setCurrentSeqNum(receivedSegment->ackNum);
 
-                //     if (receivedSegment->flags.fin)
-                //     {
-                //         cout << "[FIN Received] Transitioning to TIME_WAIT state." << endl;
-                //         // Transition to TIME_WAIT (not shown in original, but logically follows)
-                //         this->state = TIME_WAIT;
+                            connection->setStatus(CLOSE_WAIT);
+                            connection->setRetryAttempt(0);
 
-                //         // Send an ACK to acknowledge the FIN
-                //         Segment ackSegment;
-                //         ackSegment.seqNum = connection->getCurrentSeqNum();
-                //         ackSegment.ackNum = connection->getCurrentAckNum();
-                //         ackSegment.flags.ack = true;
-                //         connection->send(connection->getSenderIp(), this->destPort, &ackSegment, sizeof(ackSegment));
-                //     }
-                // }
+                            break;
+                        }
+                    }
+                }
+
+                connection->setRetryAttempt(connection->getRetryAttempt() + 1);
+                
                 break;
             }
             case CLOSE_WAIT:
             {
+                // prepare and send FIN-ACK packet
+                connection->setDataStream(nullptr);
+
+                Segment segment = connection->generateSegmentsFromPayload(this->destPort);
+
+                Segment finAckSegment = finAck(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum);
+
+                connection->send(this->destIP, this->destPort, &finAckSegment, sizeof(finAckSegment));
+
+                std::cout << "[Closing] [S=" << finAckSegment.seqNum << "] " << "[A=" << finAckSegment.ackNum << "] " <<  "Sending FIN-ACK request to " << this->destIP << ":" << this->destPort << std::endl;
+
+                connection->setStatus(LAST_ACK);
+                connection->setRetryAttempt(0);
+                
                 break;
             }
             case CLOSING:
@@ -268,6 +291,31 @@ void Client::run()
             }
             case LAST_ACK:
             {
+                // Wait for LAST ACK from the client
+                receivedBytes = connection->recv(buffer, sizeof(buffer));
+                if (receivedBytes > 0)
+                {
+                    receivedSegment = reinterpret_cast<Segment *>(buffer);
+
+                    // Validate destination port
+                    if (receivedSegment->destPort == connection->getPort())
+                    {
+                        // Check if it's an FIN-ACK packet
+                        if (!receivedSegment->flags.syn && receivedSegment->flags.ack && !receivedSegment->flags.fin)
+                        {
+                            std::cout << "[CLOSING] [S=" << receivedSegment->seqNum << "] Receiving ACK request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
+                            
+                            connection->setCurrentSeqNum(receivedSegment->ackNum);
+
+                            cout << "Client Connection closed successfully." << endl;
+                            exit(0);
+                        }
+                    }
+                }
+
+                connection->setStatus(CLOSE_WAIT);
+                connection->setRetryAttempt(connection->getRetryAttempt() + 1);
+                
                 break;
             }
             default:
