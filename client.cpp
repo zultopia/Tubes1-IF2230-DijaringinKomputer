@@ -182,12 +182,17 @@ void Client::run()
 
                                 connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
                                 std::cout << "[Established] [A=" << receivedSegment->seqNum << "] Sent" << std::endl;
+
+                                if (receivedSegment->flags.fin) {
+                                    std::string str(fullBuffer.begin(), fullBuffer.end());
+                                    std::cout << "fullBuffer content as string: " << str << std::endl;
+                                    
+                                    connection->setStatus(FIN_WAIT_2);
+                                    connection->setRetryAttempt(0);
+                                    break;
+                                }
                             }
                         }
-                        // else
-                        // {
-                        //     std::cout << "[Warning] Received unexpected packet during ESTABLISHED state." << std::endl;
-                        // }
                     }
 
                     auto elapsedTime = std::chrono::steady_clock::now() - startTime;
@@ -197,7 +202,7 @@ void Client::run()
 
                         if (receivedPayload.length() == 0)
                         {
-                            cout << "It seems like the server not established yetc" << endl;
+                            cout << "It seems like the server is not established yet" << endl;
                             connection->setStatus(SYN_RECEIVED);
                             connection->setRetryAttempt(connection->getRetryAttempt() + 1);
 
@@ -205,30 +210,8 @@ void Client::run()
 
                             break;
                         }
-                        else{
-                            std::cout << "[Timeout] No message received within 5 seconds." << std::endl;
-
-                            std::cout << "Trying to chek FIN packet in FIN_WAIT_2 state" << std::endl;
-
-                            connection->setStatus(FIN_WAIT_2);
-                            connection->setRetryAttempt(0);
-
-                            isChangeStatus = 1;
-
-                            break;
-                        }
                     }
                 }
-
-                if (!isChangeStatus)
-                {
-                    std::string str(fullBuffer.begin(), fullBuffer.end());
-                    std::cout << "fullBuffer content as string: " << str << std::endl;
-                    
-                    connection->setStatus(FIN_WAIT_2);
-                    connection->setRetryAttempt(0);
-                }
-
                 break;
             }
             case FIN_WAIT_1:

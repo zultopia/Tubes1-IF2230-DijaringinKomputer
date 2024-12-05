@@ -191,6 +191,10 @@ void Server::run()
                 size_t payloadSize = std::min(MAX_PAYLOAD_SIZE, remainingData);
 
                 Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort, currentIndex);
+                if (currentIndex + MAX_PAYLOAD_SIZE >= dataSize) {
+                    segment.flags.fin = 1;
+                    segment = updateChecksum(segment);
+                }
 
                 sentSegments.push_back(segment);
                 sentTimes[segment.seqNum] = std::chrono::steady_clock::now();
