@@ -53,11 +53,14 @@ void Client::run()
                     // Check if the destination port in segment is the same as this socket's port
                     if (receivedSegment->destPort == connection->getPort())
                     {
-                        // Check if it's an SYN+ACK packet
+                        // Check if it's an SYN-ACK packet
                         if (receivedSegment->flags.syn && receivedSegment->flags.ack)
                         {
                             if (receivedSegment->ackNum == connection->getCurrentSeqNum() + 1)
                             {
+                                connection->setCurrentSeqNum(receivedSegment->ackNum);
+                                connection->setCurrentAckNum(receivedSegment->seqNum + 1);
+
                                 std::cout << "[Handshake] [S=" << receivedSegment->seqNum << "] " << "[A=" << receivedSegment->ackNum << "] " <<  "Received SYN-ACK request from " << this->destIP << ":" << this->destPort << std::endl;
 
                                 // PINJAM STATE UNTUK RETRANSMIT
@@ -113,7 +116,7 @@ void Client::run()
                 connection->setDataStream(nullptr);
 
                 Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
-                Segment ackSegment = ack(&segment, receivedSegment->ackNum, receivedSegment->seqNum + 1);
+                Segment ackSegment = ack(&segment, connection->getCurrentSeqNum(), connection->getCurrentAckNum());
 
                 connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
                 
@@ -127,6 +130,7 @@ void Client::run()
             }
             case ESTABLISHED:
             {
+                // BISA GAK JANGAN PAKE TIME
                 auto startTime = std::chrono::steady_clock::now();
 
                 size_t windowSize = MAX_PAYLOAD_SIZE;
@@ -135,6 +139,8 @@ void Client::run()
                 size_t seqNumAck = 0;
                 
                 std::vector<Segment> waitingSegments;
+
+                uint32_t isChangeStatus = 0; // status change inside while loop
                 
                 while (true)
                 {
@@ -194,26 +200,34 @@ void Client::run()
                             cout << "It seems like the server not established yetc" << endl;
                             connection->setStatus(SYN_RECEIVED);
                             connection->setRetryAttempt(connection->getRetryAttempt() + 1);
+
+                            isChangeStatus = 1;
+
                             break;
                         }
                         else{
                             std::cout << "[Timeout] No message received within 5 seconds." << std::endl;
 
                             std::cout << "Trying to chek FIN packet in FIN_WAIT_2 state" << std::endl;
+
                             connection->setStatus(FIN_WAIT_2);
                             connection->setRetryAttempt(0);
-                            break;
+
+                            isChangeStatus = 1;
 
                             break;
                         }
                     }
                 }
 
-                std::string str(fullBuffer.begin(), fullBuffer.end());
-                std::cout << "fullBuffer content as string: " << str << std::endl;
-                
-                connection->setStatus(FIN_WAIT_2);
-                connection->setRetryAttempt(0);
+                if (!isChangeStatus)
+                {
+                    std::string str(fullBuffer.begin(), fullBuffer.end());
+                    std::cout << "fullBuffer content as string: " << str << std::endl;
+                    
+                    connection->setStatus(FIN_WAIT_2);
+                    connection->setRetryAttempt(0);
+                }
 
                 break;
             }
@@ -223,6 +237,7 @@ void Client::run()
             }
             case FIN_WAIT_2:
             {
+                cout << "Client is in FIN_WAIT_2 state." << endl;
                 // Wait for FIN from the client
                 receivedBytes = connection->recv(buffer, sizeof(buffer));
                 if (receivedBytes > 0)
@@ -235,9 +250,10 @@ void Client::run()
                         // Check if it's an FIN packet
                         if (!receivedSegment->flags.syn && !receivedSegment->flags.ack && receivedSegment->flags.fin)
                         {
-                            std::cout << "[CLOSING] [S=" << receivedSegment->seqNum << "] Receiving FIN request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
-                            
                             connection->setCurrentSeqNum(receivedSegment->ackNum);
+                            connection->setCurrentAckNum(receivedSegment->seqNum + 1);
+
+                            std::cout << "[CLOSING] [S=" << receivedSegment->seqNum << "] Receiving FIN request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
 
                             connection->setStatus(CLOSE_WAIT);
                             connection->setRetryAttempt(0);
@@ -248,6 +264,13 @@ void Client::run()
                 }
 
                 connection->setRetryAttempt(connection->getRetryAttempt() + 1);
+
+                // BIAR EXIT AJA, HARUSNYA KAGAK
+                if (connection->getRetryAttempt() >= connection->getMaxRetries())
+                {
+                    std::cout << "Max retries reached." << std::endl;
+                    exit(1);
+                }
                 
                 break;
             }
@@ -258,7 +281,7 @@ void Client::run()
 
                 Segment segment = connection->generateSegmentsFromPayload(this->destPort);
 
-                Segment finAckSegment = finAck(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum);
+                Segment finAckSegment = finAck(&segment, connection->getCurrentSeqNum(), connection->getCurrentAckNum());
 
                 connection->send(this->destIP, this->destPort, &finAckSegment, sizeof(finAckSegment));
 
@@ -303,10 +326,11 @@ void Client::run()
                         // Check if it's an FIN-ACK packet
                         if (!receivedSegment->flags.syn && receivedSegment->flags.ack && !receivedSegment->flags.fin)
                         {
+                            connection->setCurrentSeqNum(receivedSegment->ackNum);
+                            connection->setCurrentAckNum(receivedSegment->seqNum + 1);
+
                             std::cout << "[CLOSING] [S=" << receivedSegment->seqNum << "] Receiving ACK request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
                             
-                            connection->setCurrentSeqNum(receivedSegment->ackNum);
-
                             cout << "Client Connection closed successfully." << endl;
                             exit(0);
                         }
