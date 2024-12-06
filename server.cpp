@@ -3,6 +3,7 @@
 #include <cstring>
 #include <unistd.h>
 #include <thread>
+#include <unordered_map>
 
 Server::Server(std::string ip, uint16_t port)
 {
@@ -116,7 +117,7 @@ void Server::run()
 
                         connection->setStatus(ESTABLISHED);
 
-                        std::cout << "Connection in Server established, ready to send/receive data" << std::endl;
+                        std::cout << Color::color("Connection in Server established, ready to send/receive data", Color::YELLOW) << std::endl;
 
                         break;
                     }
@@ -150,90 +151,108 @@ void Server::run()
             connection->setDataStream(dataStream);
 
             size_t dataSize = data.size();
-            size_t currentIndex = 0;
             size_t windowSize = (MAX_32_BIT - (MAX_PAYLOAD_SIZE + 1));
             size_t LAR = connection->getCurrentSeqNum();
             size_t LFS = connection->getCurrentSeqNum();
             
             connection->setCurrentSeqNum(connection->getCurrentSeqNum() + 1);
 
-            std::vector<Segment> sentSegments;
-            std::unordered_map<size_t, std::chrono::steady_clock::time_point> sentTimes;
-            
-            while (currentIndex < dataSize) {
-                while (LFS - LAR > windowSize) {
-                    std::cout << "[Established] Waiting for a free sliding window." << std::endl;
+            std::unordered_map<size_t, std::chrono::steady_clock::time_point> sentTimes; // size_t is seqNum of sent segments
+                        
+            size_t currentIndex = 0;
+            size_t startingSeqNum = connection->getCurrentSeqNum();
+            while (true) {
+                while (currentIndex < dataSize) {
+                    while (LFS - LAR > windowSize) {
+                        std::cout << Color::color("[~] [Established]", Color::MAGENTA) << "Waiting for a free sliding window." << std::endl;
 
-                    receivedBytes = connection->recv(buffer, sizeof(buffer));
-                    if (receivedBytes > 0) {
-                        receivedSegment = reinterpret_cast<Segment *>(buffer);
+                        receivedBytes = connection->recv(buffer, sizeof(buffer));
+                        while (receivedBytes > 0) {
+                            receivedSegment = reinterpret_cast<Segment *>(buffer);
 
-                        if (receivedSegment->ackNum > LAR) {
-                            std::cout << "[Established] [A=" << receivedSegment->ackNum << "] ACKed" << std::endl;
-                            LAR = receivedSegment->ackNum;
+                            if (receivedSegment->seqNum > LAR) {
+                                std::cout << Color::color("[i] [Established]", Color::GREEN) <<" [A=" << receivedSegment->ackNum << "] ACKed" << std::endl;
+                                LAR = receivedSegment->seqNum;
+                                sentTimes.erase(receivedSegment->seqNum);
+                            }
+
+                            receivedBytes = connection->recv(buffer, sizeof(buffer));
                         }
                     }
 
-                    // auto now = std::chrono::steady_clock::now();
-                    // for (const auto& entry : sentTimes) {
-                    //     if (std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second).count() > 5000) {
-                    //         size_t seqNum = entry.first;
-                    //         if (seqNum > LAR) {
-                    //             std::cout << "[RETRANSMIT] Retransmitting Segment [S=" << seqNum << "]" << std::endl;
-                    //             connection->send(connection->getSenderIp(), connection->getPort(), &sentSegments[seqNum - 1], sizeof(Segment));
-                    //             sentTimes[seqNum] = now;
-                    //         }
-                    //     }
-                    // }
+                    auto now = std::chrono::steady_clock::now();
+                    for (const auto& entry : sentTimes) {
+                        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second).count() > connection->getWaitRetransmitTime()) {
+                            std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << entry.first << "] not ACKed in time. Retransmitting." << std::endl;
+                            currentIndex = entry.first - startingSeqNum;
+                            connection->setCurrentSeqNum(entry.first);
+                            LFS = connection->getCurrentSeqNum() - MAX_PAYLOAD_SIZE;
+                            LAR = connection->getCurrentSeqNum() - MAX_PAYLOAD_SIZE;
+                            break;
+                        }
+                    }
+
+                    size_t remainingData = dataSize - currentIndex;
+                    size_t payloadSize = std::min(MAX_PAYLOAD_SIZE, remainingData);
+
+                    Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort, currentIndex);
+                    if (currentIndex + MAX_PAYLOAD_SIZE >= dataSize) {
+                        segment.flags.fin = 1;
+                        segment = updateChecksum(segment);
+                    }
+
+                    sentTimes[segment.seqNum] = std::chrono::steady_clock::now();
+
+                    connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &segment, sizeof(segment));
+                    std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << segment.seqNum << "] Sent" << std::endl;
+
+                    LFS = segment.seqNum;
+
+                    currentIndex += payloadSize;
+                    connection->setCurrentSeqNum(connection->getCurrentSeqNum() + payloadSize);
                 }
 
-                size_t remainingData = dataSize - currentIndex;
-                size_t payloadSize = std::min(MAX_PAYLOAD_SIZE, remainingData);
+                std::cout << Color::color("[~] [Established] All packets have been sent. Waiting for ACKs", Color::MAGENTA) << std::endl;
 
-                Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort, currentIndex);
+                bool needToRetransmit = false;
+                bool allAcked = false;
+                while (!needToRetransmit && !allAcked) {
+                    receivedBytes = connection->recv(buffer, sizeof(buffer));
+                    while (receivedBytes > 0) {
+                        receivedSegment = reinterpret_cast<Segment *>(buffer);
 
-                sentSegments.push_back(segment);
-                sentTimes[segment.seqNum] = std::chrono::steady_clock::now();
+                        if (receivedSegment->seqNum > LAR) {
+                            std::cout << Color::color("[i] [Established]", Color::GREEN) <<"[A=" << receivedSegment->ackNum << "] ACKed" << std::endl;
+                            LAR = receivedSegment->seqNum;
+                            sentTimes.erase(receivedSegment->seqNum);
 
-                connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &segment, sizeof(segment));
-                std::cout << "[Established] [S=" << segment.seqNum << "] Sent" << std::endl;
+                            if (LAR == LFS) {
+                                std::cout << Color::color("[i] All packets successfully acknowledged. Closing connection.", Color::YELLOW) << std::endl;
 
-                LFS = segment.seqNum;
-
-                currentIndex += payloadSize;
-                connection->setCurrentSeqNum(connection->getCurrentSeqNum() + payloadSize);
-            }
-
-            std::cout << "[Established] All packets have been sent." << std::endl;
-
-            while (true) {
-                receivedBytes = connection->recv(buffer, sizeof(buffer));
-                if (receivedBytes > 0) {
-                    receivedSegment = reinterpret_cast<Segment *>(buffer);
-
-                    if (receivedSegment->ackNum > LAR) {
-                        std::cout << "[Established] [A=" << receivedSegment->ackNum << "] ACKed" << std::endl;
-                        LAR = receivedSegment->ackNum;
-
-                        if (LAR == LFS) {
-                            std::cout << "All packets successfully acknowledged. Closing connection." << std::endl;
-
-                            connection->setStatus(FIN_WAIT_1);
+                                connection->setStatus(FIN_WAIT_1);
+                                allAcked = true;
+                                break;
+                            }
+                            receivedBytes = connection->recv(buffer, sizeof(buffer));
+                        }
+                    }
+                    
+                    auto now = std::chrono::steady_clock::now();
+                    for (const auto& entry : sentTimes) {
+                        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second).count() > connection->getWaitRetransmitTime()) {
+                            currentIndex = entry.first - startingSeqNum;
+                            connection->setCurrentSeqNum(entry.first);
+                            LFS = connection->getCurrentSeqNum() - MAX_PAYLOAD_SIZE;
+                            LAR = connection->getCurrentSeqNum() - MAX_PAYLOAD_SIZE;
+                            needToRetransmit = true;
                             break;
                         }
                     }
                 }
-                // auto now = std::chrono::steady_clock::now();
-                // for (const auto& entry : sentTimes) {
-                //     if (std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second).count() > 5000) {
-                //         size_t seqNum = entry.first;
-                //         if (seqNum > LAR) {
-                //             std::cout << "[RETRANSMIT] Retransmitting Segment [S=" << seqNum << "]" << std::endl;
-                //             connection->send(connection->getSenderIp(), connection->getPort(), &sentSegments[seqNum - 1], sizeof(Segment));
-                //             sentTimes[seqNum] = now;
-                //         }
-                //     }
-                // }
+
+                if (!needToRetransmit) {
+                    break;
+                }
             }
 
             break;
@@ -252,7 +271,7 @@ void Server::run()
 
             connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &finSegment, sizeof(finSegment));
             
-            std::cout << "[Closing] [S=" << finSegment.seqNum << "] " << "[A=" << finSegment.ackNum << "] " <<  "Sending FIN request to " << this->connection->getSenderIp() << ":" << finSegment.destPort << std::endl;
+            std::cout << Color::color("[i] [Closing]", Color::YELLOW) <<"[S=" << finSegment.seqNum << "] " << "[A=" << finSegment.ackNum << "] " <<  "Sending FIN request to " << this->connection->getSenderIp() << ":" << finSegment.destPort << std::endl;
 
             connection->setStatus(CLOSING);
             
@@ -286,7 +305,7 @@ void Server::run()
                         connection->setCurrentSeqNum(receivedSegment->ackNum);
                         connection->setCurrentAckNum(receivedSegment->seqNum + 1);
 
-                        std::cout << "[CLOSING] [S=" << receivedSegment->seqNum << "] Receiving FIN-ACK request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
+                        std::cout << Color::color("[+] [Closing]", Color::GREEN) << " [S=" << receivedSegment->seqNum << "] Receiving FIN-ACK request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
                         
                         connection->setStatus(LAST_ACK);
                         connection->setRetryAttempt(0);
@@ -316,16 +335,16 @@ void Server::run()
                 connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
             }
             
-            std::cout << "[Closing] [S=" << ackSegment.seqNum << "] " << "[A=" << ackSegment.ackNum << "] " <<  "Sending ACK request to " << this->connection->getSenderIp() << ":" << ackSegment.destPort << std::endl;
+            std::cout << Color::color("[i] [Closing]", Color::YELLOW) <<" [S=" << ackSegment.seqNum << "] " << "[A=" << ackSegment.ackNum << "] " <<  "Sending ACK request to " << this->connection->getSenderIp() << ":" << ackSegment.destPort << std::endl;
 
-            cout << "Server Connection closed successfully." << endl;
+            cout << Color::color("Server Connection closed successfully.", Color::YELLOW) << endl;
             exit(0);
             
             break;
         }
 
         default:
-            std::cout << "Unknown state!" << std::endl;
+            std::cout << Color::color("Unknown state!", Color::RED) << std::endl;
             break;
         }
     }
