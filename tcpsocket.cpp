@@ -12,6 +12,7 @@ TCPSocket::TCPSocket(std::string ip, uint16_t port)
       currentSeqNum(generateRandomSeqNum()),
       currentAckNum(0),
       dataStream(nullptr),
+      dataSize(0),
       retryAttempt(0)
 {
     // Create a socket with UDP (SOCK_DGRAM)
@@ -175,21 +176,18 @@ uint32_t TCPSocket::generateRandomSeqNum()
     return seqNum;
 }
 
-void TCPSocket::setDataStream(uint8_t *dataStream)
+void TCPSocket::setDataStream(uint8_t *dataStream, size_t dataSize)
 {
-    if (dataStream != nullptr)
+    if (dataStream != nullptr && dataSize > 0)
     {
-        // Set the data stream
         this->dataStream = static_cast<void *>(dataStream);
+        this->dataSize = dataSize;
     }
     else
     {
-        // Clear the data stream
         this->dataStream = nullptr;
+        this->dataSize = 0;
     }
-    // this->dataSize = dataSize;
-    // this->dataIndex = 0;
-    // generate segment from data stream
 }
 
 Segment TCPSocket::generateSegmentsFromPayload(uint16_t destPort, size_t offset)
@@ -203,18 +201,13 @@ Segment TCPSocket::generateSegmentsFromPayload(uint16_t destPort, size_t offset)
     segment.flags = {0};           // No flags set initially
 
     // Ensure dataStream is not nullptr and the offset is within a valid range
-    if (dataStream != nullptr)
+    if (dataStream != nullptr && offset < dataSize)
     {
-        segment.flags.ack = 1;
-        size_t dataLength = strlen(reinterpret_cast<const char*>(dataStream));
+        segment.flags.ack = 1; // Set ACK flag for payload
 
-        size_t startByte = offset;
-
-        if (startByte < dataLength)
-        {
-            size_t bytesToCopy = std::min(MAX_PAYLOAD_SIZE, dataLength - startByte);
-            memcpy(segment.payload, reinterpret_cast<uint8_t*>(dataStream) + startByte, bytesToCopy);
-        }
+        // Calculate how many bytes to copy from the data stream
+        size_t bytesToCopy = std::min(MAX_PAYLOAD_SIZE, dataSize - offset);
+        memcpy(segment.payload, reinterpret_cast<uint8_t *>(dataStream) + offset, bytesToCopy);
     }
 
     // Set the checksum

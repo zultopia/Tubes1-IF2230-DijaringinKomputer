@@ -1,18 +1,24 @@
 #include "client.hpp"
 #include "segment.hpp"
 #include <iostream>
+#include <fstream>
 #include <unistd.h>
 #include <thread>
 
 Client::Client(std::string ip, int32_t port)
 {
     this->connection = new TCPSocket(ip, port);
+    this->sendingFile = false;
 }
 
 Client::~Client()
 {
     connection->close();
     delete connection;
+}
+
+void Client::setSendingFile(bool isSendingFile){
+    sendingFile = isSendingFile? 1: 0;
 }
 
 void Client::run()
@@ -30,7 +36,7 @@ void Client::run()
         {
             case LISTEN:
             {
-                connection->setDataStream(nullptr);
+                connection->setDataStream(nullptr, 0);
 
                 Segment segment = connection->generateSegmentsFromPayload(this->destPort);
                 Segment syncSegment = syn(&segment, connection->getCurrentSeqNum());
@@ -66,6 +72,10 @@ void Client::run()
                                 // PINJAM STATE UNTUK RETRANSMIT
                                 connection->setStatus(SYN_RECEIVED);
                                 connection->setRetryAttempt(0);
+
+                                if (receivedSegment->options.sendingFile){
+                                    setSendingFile(true);
+                                }
 
                                 // // Prepare and send a ACK packet
                                 // connection->setDataStream(nullptr);
@@ -113,7 +123,7 @@ void Client::run()
             case SYN_RECEIVED:
             {
                 // Prepare and send a ACK packet
-                connection->setDataStream(nullptr);
+                connection->setDataStream(nullptr, 0);
 
                 Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
                 Segment ackSegment = ack(&segment, connection->getCurrentSeqNum(), connection->getCurrentAckNum());
@@ -130,7 +140,40 @@ void Client::run()
             }
             case ESTABLISHED:
             {
-                // BISA GAK JANGAN PAKE TIME
+                std::string outputFileName = "";
+                if (sendingFile)
+                {
+                    receivedBytes = connection->recv(buffer, sizeof(buffer));
+                    if (!isValidChecksum(*receivedSegment)) {
+                        std::cout << Color::color("[Warning] Received packet with invalid checksum.", Color::RED) << std::endl;
+                        continue;
+                    }
+                    if (receivedBytes > 0)
+                    {
+                        receivedSegment = reinterpret_cast<Segment *>(buffer);
+                        if (receivedSegment->flags.ack && !receivedSegment->flags.syn) {
+                            std::string metadataStr(reinterpret_cast<char *>(receivedSegment->payload), MAX_PAYLOAD_SIZE);
+                            
+                            std::string fileName, fileSizeStr;
+                            size_t fileNamePos = metadataStr.find("FILENAME:");
+                            size_t fileSizePos = metadataStr.find("SIZE:");
+                            if (fileNamePos != std::string::npos && fileSizePos != std::string::npos) {
+                                fileNamePos += 9; // Length of "FILENAME:"
+                                fileName = metadataStr.substr(fileNamePos, fileSizePos - fileNamePos - 1); // Extract filename
+                                fileSizePos += 5; // Length of "SIZE:"
+                                fileSizeStr = metadataStr.substr(fileSizePos, metadataStr.find(';', fileSizePos) - fileSizePos);
+                                std::cout << Color::color("[i] [ESTABLISHED] Metadata received. File: ", Color::YELLOW) << fileName << ", Size: " << fileSizeStr << " bytes" << std::endl;
+                            }
+                            outputFileName = fileName;
+
+                            Segment ackSegment = connection->generateSegmentsFromPayload(this->destPort);
+                            ackSegment = ack(&ackSegment, receivedSegment->seqNum, receivedSegment->seqNum + metadataStr.size());
+                            connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
+                            std::cout << Color::color("[+] [ESTABLISHED]", Color::GREEN) << "[S="<< ackSegment.seqNum <<"] [A="<< ackSegment.ackNum <<"] Sent ACK for metadata."<< std::endl;
+                        }
+                    }
+                }
+
                 auto startTime = std::chrono::steady_clock::now();
 
                 size_t windowSize = MAX_PAYLOAD_SIZE;
@@ -139,7 +182,7 @@ void Client::run()
                 size_t seqNumAck = 0;
                 
                 std::vector<Segment> waitingSegments;
-
+                std::vector<uint8_t> receivedData;
                 uint32_t isChangeStatus = 0; // status change inside while loop
                 
                 while (true)
@@ -177,10 +220,20 @@ void Client::run()
                                     payloadSize = MAX_PAYLOAD_SIZE;
                                 }
 
-                                std::string payloadStr(reinterpret_cast<char*>(receivedSegment->payload), payloadSize);
-                                fullBuffer.insert(fullBuffer.end(), receivedSegment->payload, receivedSegment->payload + payloadSize);
+                                // Append payload to received data
+                                receivedData.insert(receivedData.end(),
+                                    receivedSegment->payload,
+                                    receivedSegment->payload + payloadSize);
 
-                                std::cout << Color::color("[i] [Established]", Color::GREEN) <<" [S=" << receivedSegment->seqNum << "] ACKed with payload: " << payloadStr << std::endl;
+                                std::string payloadStr(reinterpret_cast<char*>(receivedSegment->payload), payloadSize);
+                                // fullBuffer.insert(fullBuffer.end(), receivedSegment->payload, receivedSegment->payload + payloadSize);
+
+                                if (!sendingFile){
+                                    std::cout << Color::color("[i] [Established]", Color::GREEN) <<" [S=" << receivedSegment->seqNum << "] ACKed with payload : " << payloadStr << std::endl;
+                                } else {
+                                    std::cout << Color::color("[i] [Established]", Color::GREEN) <<" [S=" << receivedSegment->seqNum << "] ACKed" << std::endl;
+
+                                }
 
                                 Segment segment = connection->generateSegmentsFromPayload(this->destPort);
                                 Segment ackSegment = ack(&segment, receivedSegment->seqNum, receivedSegment->seqNum + payloadSize);
@@ -189,9 +242,23 @@ void Client::run()
                                 std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [A=" << ackSegment.ackNum << "] Sent" << std::endl;
 
                                 if (receivedSegment->flags.fin) {
-                                    std::string str(fullBuffer.begin(), fullBuffer.end());
-                                    std::cout << "[i] fullBuffer content as string: " << str << std::endl;
-                                    
+                                    // std::string str(fullBuffer.begin(), fullBuffer.end());
+                                    // std::cout << "[i] fullBuffer content as string: " << str << std::endl;
+                                    if (sendingFile) {
+                                        std::ofstream outputFile(outputFileName, std::ios::binary);
+                                        if (outputFile.is_open()) {
+                                            outputFile.write(reinterpret_cast<const char *>(receivedData.data()), receivedData.size());
+                                            outputFile.close();
+                                            std::cout << Color::color("[+] File saved as: ", Color::GREEN) << outputFileName << std::endl;
+                                        } else {
+                                            std::cerr << Color::color("[-] Failed to save file.", Color::RED) << std::endl;
+                                        }
+                                    }else {
+                                        // Print received text
+                                        std::string receivedPayload(receivedData.begin(), receivedData.end());
+                                        std::cout << Color::color("[i] [Established]", Color::GREEN)
+                                                << "Received message: " << receivedPayload << std::endl;
+                                    }
                                     connection->setStatus(FIN_WAIT_2);
                                     connection->setRetryAttempt(0);
                                     break;
@@ -203,9 +270,10 @@ void Client::run()
                     auto elapsedTime = std::chrono::steady_clock::now() - startTime;
                     if (std::chrono::duration_cast<std::chrono::seconds>(elapsedTime).count() >= 3)
                     {
-                        std::string receivedPayload(fullBuffer.begin(), fullBuffer.end());
+                        // std::string receivedPayload(fullBuffer.begin(), fullBuffer.end());
 
-                        if (receivedPayload.length() == 0)
+                        // if (receivedPayload.length() == 0)
+                        if (receivedData.empty())
                         {
                             cout << Color::color("It seems like the server is not established yet", Color::RED) << endl;
                             connection->setStatus(SYN_RECEIVED);
@@ -214,9 +282,10 @@ void Client::run()
                             isChangeStatus = 1;
 
                             break;
-                        }
+                        } 
                     }
                 }
+
                 break;
             }
             case FIN_WAIT_1:
@@ -265,7 +334,7 @@ void Client::run()
             case CLOSE_WAIT:
             {
                 // prepare and send FIN-ACK packet
-                connection->setDataStream(nullptr);
+                connection->setDataStream(nullptr, 0);
 
                 Segment segment = connection->generateSegmentsFromPayload(this->destPort);
 

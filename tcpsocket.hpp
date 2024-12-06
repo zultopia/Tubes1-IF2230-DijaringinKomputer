@@ -56,6 +56,7 @@ private:
     uint32_t currentSeqNum;
     uint32_t currentAckNum;
     void *dataStream;
+    size_t dataSize;     
 
     uint32_t generateRandomSeqNum();
 
@@ -84,7 +85,7 @@ public:
     void setRetryAttempt(uint32_t retryAttempt);
 
     Segment generateSegmentsFromPayload(uint16_t destPort, size_t offset = 0);
-    void setDataStream(uint8_t *dataStream);
+    void setDataStream(uint8_t *dataStream, size_t dataSize);
 };
 
 #endif

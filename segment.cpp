@@ -15,12 +15,13 @@ Segment ack(Segment *segment, uint32_t seqNum, uint32_t ackNum)
     return updateChecksum(*segment);
 }
 
-Segment synAck(Segment *segment, uint32_t seqNum, uint32_t ackNum)
+Segment synAck(Segment *segment, uint32_t seqNum, uint32_t ackNum, bool isSendingFile)
 {
     segment->flags.syn = 1;
     segment->flags.ack = 1;
     segment->seqNum = seqNum;
     segment->ackNum = ackNum;
+    segment->options.sendingFile = isSendingFile ? 1 : 0;
     return updateChecksum(*segment);
 }
 

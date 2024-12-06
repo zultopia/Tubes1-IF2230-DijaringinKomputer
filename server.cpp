@@ -10,7 +10,8 @@ Server::Server(std::string ip, uint16_t port)
     // this->port = port;
     this->establishedIp = {0};
     this->connection = new TCPSocket(ip, port);
-    this->data = "";
+    this->data = std::vector<uint8_t>();
+    this->sendingFile = false;
 }
 
 Server::~Server()
@@ -19,8 +20,21 @@ Server::~Server()
     delete connection;
 }
 
-void Server::setData(const std::string& dt) {
-    data = dt;
+void Server::setFileName(const std::string& name) {
+    fileName = name;
+}
+
+void Server::setSendingFile(bool isSendingFile){
+    sendingFile = isSendingFile? 1: 0;
+}
+
+void Server::setData(const std::string& textData) 
+{
+    data.assign(textData.begin(), textData.end()); 
+}
+
+void Server::setData(const std::vector<uint8_t>& binaryData) {
+    data = binaryData; 
 }
 
 void Server::run()
@@ -51,7 +65,7 @@ void Server::run()
                     {
                         connection->setCurrentAckNum(receivedSegment->seqNum + 1);
 
-                        std::cout << Color::color("[i] [Handshake]", Color::YELLOW) << "[S=" << receivedSegment->seqNum << "] Receiving SYN request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
+                        std::cout << Color::color("[+] [Handshake]", Color::GREEN) << "[S=" << receivedSegment->seqNum << "] Receiving SYN request from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
 
                         // PINJAM STATE UNTUK RETRANSMIT
                         connection->setStatus(SYN_SENT);
@@ -82,12 +96,12 @@ void Server::run()
         case SYN_SENT:
         {
             // Prepare and send a SYN-ACK packet
-            connection->setDataStream(nullptr); // Clear any previous data stream
+            connection->setDataStream(nullptr, 0); // Clear any previous data stream
             
             Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
 
             // SYN-ACK requires incrementing the received sequence number by 1            
-            Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), connection->getCurrentAckNum());
+            Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), connection->getCurrentAckNum(), sendingFile);
 
             connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
             
@@ -145,10 +159,34 @@ void Server::run()
 
         case ESTABLISHED:
         {
-            uint8_t* dataStream = new uint8_t[data.size() + 1];
-            memcpy(dataStream, data.c_str(), data.size() + 1);
+            if (sendingFile) {
+                std::string metadata = "FILENAME:" + fileName + ";SIZE:" + std::to_string(data.size()) + ";";
+                std::vector<uint8_t> metadataBytes(metadata.begin(), metadata.end());
+                connection->setDataStream(metadataBytes.data(), metadataBytes.size());
+                Segment metadataSegment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
+                Segment ackSegment = ack(&metadataSegment, connection->getCurrentSeqNum(), connection->getCurrentAckNum());
 
-            connection->setDataStream(dataStream);
+                connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &metadataSegment, sizeof(metadataSegment));
+                std::cout << Color::color("[i] [ESTABLISHED] Metadata sent: ", Color::YELLOW) << metadata << " [S="<< ackSegment.seqNum <<"]" << std::endl;
+
+                bool metadataAcked = false;
+                while (!metadataAcked) {
+                    receivedBytes = connection->recv(buffer, sizeof(buffer));
+                    if (receivedBytes > 0) {
+                        receivedSegment = reinterpret_cast<Segment*>(buffer);
+                        std::cout << receivedSegment->ackNum << " expecting " << metadataSegment.seqNum + metadata.size() << std::endl;
+                        if (receivedSegment->flags.ack) {
+                            std::cout << Color::color("[+] [ESTABLISHED] Metadata ACK received.", Color::GREEN) << std::endl;
+                            metadataAcked = true;
+                        }
+                    }
+                }
+            }
+            // uint8_t* dataStream = new uint8_t[data.size() + 1];
+            // memcpy(dataStream, data.c_str(), data.size() + 1);
+
+            // connection->setDataStream(dataStream);
+            connection->setDataStream(data.data(), data.size());
 
             size_t dataSize = data.size();
             size_t windowSize = (MAX_32_BIT - (MAX_PAYLOAD_SIZE + 1));
@@ -262,7 +300,7 @@ void Server::run()
         case FIN_WAIT_1:
         {
             // Prepare and send a FIN packet
-            connection->setDataStream(nullptr); // Clear any previous data stream
+            connection->setDataStream(nullptr, 0); // Clear any previous data stream
             
             Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
 
@@ -324,7 +362,7 @@ void Server::run()
         case LAST_ACK:
         {
             // Prepare and send a ACK packet
-            connection->setDataStream(nullptr); // Clear any previous data stream
+            connection->setDataStream(nullptr, 0); // Clear any previous data stream
             
             Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
 

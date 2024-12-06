@@ -10,6 +10,7 @@ class Client
 private:
     string destIP;
     uint16_t destPort;
+    bool sendingFile;
 
 public:
     Client(std::string ip, int32_t port);
@@ -17,6 +18,7 @@ public:
     void run();
 
     void setDestination();
+    void setSendingFile(bool isSendingFile);
     
 
 private:
