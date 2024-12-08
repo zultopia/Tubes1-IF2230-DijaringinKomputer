@@ -65,7 +65,7 @@ public:
     TCPSocket(string ip, uint16_t port);
     ~TCPSocket();
     void send(string destIp, uint16_t destPort, void *dataStream, uint32_t dataSize);
-    int32_t recv(void *buffer, uint32_t length);
+    int32_t recv(void *buffer, uint32_t length, size_t duration = 300000);
     bool isDataAvailable();
     void close();
 

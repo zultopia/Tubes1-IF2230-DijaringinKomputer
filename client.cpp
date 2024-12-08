@@ -177,8 +177,8 @@ void Client::run()
                 auto startTime = std::chrono::steady_clock::now();
 
                 size_t windowSize = MAX_PAYLOAD_SIZE;
-                size_t LAF = 0;
-                size_t LFR = 0;
+                size_t LFR = connection->getCurrentAckNum() - 1;
+                size_t LAF = LFR + windowSize;
                 size_t seqNumAck = 0;
                 
                 std::vector<Segment> waitingSegments;
@@ -198,13 +198,13 @@ void Client::run()
 
                         if (!receivedSegment->flags.syn && receivedSegment->flags.ack)
                         {
-                            if (LAF == 0) {
-                                LFR = receivedSegment->seqNum - 1;
-                                LAF = LFR + windowSize;
-                                seqNumAck = receivedSegment->seqNum;
-                            }
-
                             if (LFR < receivedSegment->seqNum && receivedSegment->seqNum <= LAF) {
+                                if (LFR == connection->getCurrentAckNum() - 1) {
+                                    LFR = receivedSegment->seqNum - 1;
+                                    LAF = LFR + windowSize;
+                                    seqNumAck = receivedSegment->seqNum;
+                                }
+
                                 seqNumAck = receivedSegment->seqNum;
                                 LFR = seqNumAck;
                                 LAF = LFR + windowSize;
@@ -297,6 +297,12 @@ void Client::run()
                 cout << Color::color("[i] Client is in FIN_WAIT_2 state.", Color::YELLOW) << endl;
                 // Wait for FIN from the client
                 receivedBytes = connection->recv(buffer, sizeof(buffer));
+                receivedSegment = reinterpret_cast<Segment *>(buffer);
+                while (receivedBytes > 0 && !(!receivedSegment->flags.syn && !receivedSegment->flags.ack && receivedSegment->flags.fin)) {
+                    receivedBytes = connection->recv(buffer, sizeof(buffer), 10);
+                    receivedSegment = reinterpret_cast<Segment *>(buffer);
+                }                
+
                 if (receivedBytes > 0)
                 {
                     receivedSegment = reinterpret_cast<Segment *>(buffer);
@@ -412,5 +418,5 @@ void Client::setDestination()
     // destIP = "127.0.0.1";
     std::cout << Color::color("[?] Enter the destination port: ", Color::CYAN);
     std::cin >> destPort;
-    // destPort = 8031;
+    destPort = 8031;
 }
