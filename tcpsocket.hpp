@@ -33,7 +33,7 @@ class TCPSocket
 {
     // todo add tcp connection state?
 private:
-    static constexpr uint32_t WAIT_RETRANSMIT_TIME = 500; // 500 milliseconds
+    static constexpr uint32_t WAIT_RETRANSMIT_TIME = 3000; // 500 milliseconds
     static constexpr uint32_t MAX_RETRIES = 5;
     /**
      * The ip address and port for the socket instance

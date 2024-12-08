@@ -205,7 +205,7 @@ void Server::run()
                     while (LFS - LAR > windowSize) {
                         std::cout << Color::color("[~] [Established]", Color::MAGENTA) << "Waiting for a free sliding window." << std::endl;
 
-                        receivedBytes = connection->recv(buffer, sizeof(buffer));
+                        receivedBytes = connection->recv(buffer, sizeof(buffer), 0);
                         while (receivedBytes > 0) {
                             receivedSegment = reinterpret_cast<Segment *>(buffer);
 
@@ -215,7 +215,7 @@ void Server::run()
                                 sentTimes.erase(receivedSegment->seqNum);
                             }
 
-                            receivedBytes = connection->recv(buffer, sizeof(buffer));
+                            receivedBytes = connection->recv(buffer, sizeof(buffer), 0);
                         }
                     }
 
@@ -242,20 +242,8 @@ void Server::run()
                     }
 
                     sentTimes[segment.seqNum] = std::chrono::steady_clock::now();
-
-                    // // Generate a random integer between 0 and RAND_MAX
-                    // int random_int = std::rand();
-
-                    // // Scale it to a probability between 0 and 1
-                    // double ploss = static_cast<double>(random_int) / RAND_MAX;
-
-                    // std::cout << ploss;                    
-                    // if (ploss < 0.9) {
-                        connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &segment, sizeof(segment));
-                    // } else {
-                    //     std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << segment.seqNum << "] NOT Sent" << std::endl;
-                    //     ploss -= 0.011;
-                    // }
+                    
+                    connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &segment, sizeof(segment));
                     
                     std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << segment.seqNum << "] Sent" << std::endl;
 
@@ -270,7 +258,7 @@ void Server::run()
                 bool needToRetransmit = false;
                 bool allAcked = false;
                 while (!needToRetransmit && !allAcked) {
-                    receivedBytes = connection->recv(buffer, sizeof(buffer));
+                    receivedBytes = connection->recv(buffer, sizeof(buffer), 0);
                     while (receivedBytes > 0) {
                         receivedSegment = reinterpret_cast<Segment *>(buffer);
                         if (receivedSegment->seqNum > LAR) {
@@ -286,7 +274,7 @@ void Server::run()
                                 break;
                             }
                         }
-                        receivedBytes = connection->recv(buffer, sizeof(buffer));
+                        receivedBytes = connection->recv(buffer, sizeof(buffer), 0);
                     }
                     
                     auto now = std::chrono::steady_clock::now();
@@ -316,6 +304,7 @@ void Server::run()
         case FIN_WAIT_1:
         {
             // Prepare and send a FIN packet
+            std::this_thread::sleep_for(std::chrono::seconds(1));
             connection->setDataStream(nullptr, 0); // Clear any previous data stream
             
             Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
@@ -345,6 +334,13 @@ void Server::run()
         case CLOSING:
         {
             // Wait for FIN from the client
+            receivedBytes = connection->recv(buffer, sizeof(buffer));
+            receivedSegment = reinterpret_cast<Segment *>(buffer);
+            while (receivedBytes > 0 && !(!receivedSegment->flags.syn && receivedSegment->flags.ack && receivedSegment->flags.fin)) {
+                receivedBytes = connection->recv(buffer, sizeof(buffer), 10);
+                receivedSegment = reinterpret_cast<Segment *>(buffer);
+            }    
+            
             receivedBytes = connection->recv(buffer, sizeof(buffer));
             if (receivedBytes > 0)
             {
