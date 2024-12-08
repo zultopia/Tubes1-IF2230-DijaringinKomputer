@@ -418,5 +418,5 @@ void Client::setDestination()
     // destIP = "127.0.0.1";
     std::cout << Color::color("[?] Enter the destination port: ", Color::CYAN);
     std::cin >> destPort;
-    destPort = 8031;
+    // destPort = 8031;
 }
