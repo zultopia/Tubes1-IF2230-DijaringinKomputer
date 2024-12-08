@@ -328,7 +328,6 @@ void Client::run()
 
                 connection->setRetryAttempt(connection->getRetryAttempt() + 1);
 
-                // BIAR EXIT AJA, HARUSNYA KAGAK
                 if (connection->getRetryAttempt() >= connection->getMaxRetries())
                 {
                     std::cout << Color::color("Max retries reached.", Color::RED) << std::endl;

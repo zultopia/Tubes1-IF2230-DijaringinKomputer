@@ -292,7 +292,9 @@ void Server::run()
                     auto now = std::chrono::steady_clock::now();
                     for (const auto& entry : sentTimes) {
                         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second).count() > connection->getWaitRetransmitTime()) {
-                            std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << entry.first << "] not ACKed in time. Retransmitting." << std::endl; 
+                            std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << entry.first << "] not ACKed in time. Retransmitting." << std::endl;
+                            connection->setRetryAttempt(connection->getRetryAttempt() + 1);
+
                             currentIndex = entry.first - startingSeqNum;
                             connection->setCurrentSeqNum(entry.first);
                             LFS = connection->getCurrentSeqNum() - MAX_PAYLOAD_SIZE;
