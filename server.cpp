@@ -3,7 +3,7 @@
 #include <cstring>
 #include <unistd.h>
 #include <thread>
-#include <unordered_map>
+#include <map>
 
 Server::Server(std::string ip, uint16_t port)
 {
@@ -12,6 +12,7 @@ Server::Server(std::string ip, uint16_t port)
     this->connection = new TCPSocket(ip, port);
     this->data = std::vector<uint8_t>();
     this->sendingFile = false;
+    std::srand(static_cast<unsigned int>(std::time(0)));
 }
 
 Server::~Server()
@@ -195,8 +196,8 @@ void Server::run()
             
             connection->setCurrentSeqNum(connection->getCurrentSeqNum() + 1);
 
-            std::unordered_map<size_t, std::chrono::steady_clock::time_point> sentTimes; // size_t is seqNum of sent segments
-                        
+            std::map<size_t, std::chrono::steady_clock::time_point> sentTimes; // size_t is seqNum of sent segments 
+
             size_t currentIndex = 0;
             size_t startingSeqNum = connection->getCurrentSeqNum();
             while (true) {
@@ -226,6 +227,7 @@ void Server::run()
                             connection->setCurrentSeqNum(entry.first);
                             LFS = connection->getCurrentSeqNum() - MAX_PAYLOAD_SIZE;
                             LAR = connection->getCurrentSeqNum() - MAX_PAYLOAD_SIZE;
+                            sentTimes.clear();
                             break;
                         }
                     }
@@ -241,7 +243,20 @@ void Server::run()
 
                     sentTimes[segment.seqNum] = std::chrono::steady_clock::now();
 
-                    connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &segment, sizeof(segment));
+                    // // Generate a random integer between 0 and RAND_MAX
+                    // int random_int = std::rand();
+
+                    // // Scale it to a probability between 0 and 1
+                    // double ploss = static_cast<double>(random_int) / RAND_MAX;
+
+                    // std::cout << ploss;                    
+                    // if (ploss < 0.9) {
+                        connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &segment, sizeof(segment));
+                    // } else {
+                    //     std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << segment.seqNum << "] NOT Sent" << std::endl;
+                    //     ploss -= 0.011;
+                    // }
+                    
                     std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << segment.seqNum << "] Sent" << std::endl;
 
                     LFS = segment.seqNum;
@@ -258,7 +273,6 @@ void Server::run()
                     receivedBytes = connection->recv(buffer, sizeof(buffer));
                     while (receivedBytes > 0) {
                         receivedSegment = reinterpret_cast<Segment *>(buffer);
-
                         if (receivedSegment->seqNum > LAR) {
                             std::cout << Color::color("[i] [Established]", Color::GREEN) <<"[A=" << receivedSegment->ackNum << "] ACKed" << std::endl;
                             LAR = receivedSegment->seqNum;
@@ -271,18 +285,20 @@ void Server::run()
                                 allAcked = true;
                                 break;
                             }
-                            receivedBytes = connection->recv(buffer, sizeof(buffer));
                         }
+                        receivedBytes = connection->recv(buffer, sizeof(buffer));
                     }
                     
                     auto now = std::chrono::steady_clock::now();
                     for (const auto& entry : sentTimes) {
                         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second).count() > connection->getWaitRetransmitTime()) {
+                            std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << entry.first << "] not ACKed in time. Retransmitting." << std::endl; 
                             currentIndex = entry.first - startingSeqNum;
                             connection->setCurrentSeqNum(entry.first);
                             LFS = connection->getCurrentSeqNum() - MAX_PAYLOAD_SIZE;
                             LAR = connection->getCurrentSeqNum() - MAX_PAYLOAD_SIZE;
                             needToRetransmit = true;
+                            sentTimes.clear();
                             break;
                         }
                     }
