@@ -119,4 +119,3 @@ This project is licensed under the MIT License.
 
 ## 🌸 Let’s Make the Network Reliable! 🌸
 Unleash your inner otaku, code like a pro, and bring honor to your clan by creating a reliable TCP over UDP protocol! 🚀
-🎌 “Reliable data delivery, wibu style!” 🎌
