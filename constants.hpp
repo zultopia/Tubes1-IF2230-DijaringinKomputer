@@ -2,7 +2,7 @@
 #define CONSTANTS_HPP
 
 constexpr int BUFFER_SIZE = 1024;
-constexpr int MAX_RETRIES = 5;
+constexpr int MAX_RETRIES = 10;
 constexpr int RETRANSMIT_DELAY_MS = 500; // in milliseconds
 
 // TCP states

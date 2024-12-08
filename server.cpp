@@ -242,7 +242,7 @@ void Server::run()
                     }
 
                     sentTimes[segment.seqNum] = std::chrono::steady_clock::now();
-                    
+
                     connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &segment, sizeof(segment));
                     
                     std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << segment.seqNum << "] Sent" << std::endl;
@@ -281,6 +281,7 @@ void Server::run()
                     for (const auto& entry : sentTimes) {
                         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second).count() > connection->getWaitRetransmitTime()) {
                             std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << entry.first << "] not ACKed in time. Retransmitting." << std::endl; 
+                            connection->setRetryAttempt(connection->getRetryAttempt() + 1);
                             currentIndex = entry.first - startingSeqNum;
                             connection->setCurrentSeqNum(entry.first);
                             LFS = connection->getCurrentSeqNum() - MAX_PAYLOAD_SIZE;
