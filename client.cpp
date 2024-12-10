@@ -77,20 +77,6 @@ void Client::run()
                                     setSendingFile(true);
                                 }
 
-                                // // Prepare and send a ACK packet
-                                // connection->setDataStream(nullptr);
-
-                                // Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
-                                // Segment ackSegment = ack(&segment, receivedSegment->ackNum, receivedSegment->seqNum + 1);
-
-                                // connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
-                                
-                                // std::cout << "[Handshake] [S=" << ackSegment.seqNum << "] " << "[A=" << ackSegment.ackNum << "] " <<  "Sending ACK request to " << this->destIP << ":" << this->destPort << std::endl;
-                                
-                                // connection->setStatus(ESTABLISHED);
-                                // connection->setRetryAttempt(0);
-
-                                // std::cout << "Connection in Client established, ready to send/receive data" << std::endl;
                                 break;
                             }
                             else
@@ -105,18 +91,6 @@ void Client::run()
                 // Back to LISTEN state
                 connection->setStatus(LISTEN);
                 connection->setRetryAttempt(this->connection->getRetryAttempt() + 1);
-                
-                // // Wait for a short duration before retransmission
-                // std::this_thread::sleep_for(std::chrono::milliseconds(connection->getWaitRetransmitTime()));
-
-                // // Retransmit SYN packet
-                // connection->setDataStream(nullptr);
-
-                // Segment segment = connection->generateSegmentsFromPayload(this->destPort);
-                // Segment syncSegment = syn(&segment, connection->getCurrentSeqNum());
-                // connection->send(this->destIP, this->destPort, &syncSegment, sizeof(syncSegment));
-
-                // std::cout << "[Handshake] [S=" << syncSegment.seqNum << "] Sending SYN request to " << this->destIP << ":" << this->destPort << std::endl;
 
                 break;
             }
@@ -183,7 +157,6 @@ void Client::run()
                 
                 std::vector<Segment> waitingSegments;
                 std::vector<uint8_t> receivedData;
-                uint32_t isChangeStatus = 0; // status change inside while loop
                 
                 while (true)
                 {
@@ -228,13 +201,8 @@ void Client::run()
                                 std::string payloadStr(reinterpret_cast<char*>(receivedSegment->payload), payloadSize);
                                 // fullBuffer.insert(fullBuffer.end(), receivedSegment->payload, receivedSegment->payload + payloadSize);
 
-                                if (!sendingFile){
-                                    std::cout << Color::color("[i] [Established]", Color::GREEN) <<" [S=" << receivedSegment->seqNum << "] ACKed with payload : " << payloadStr << std::endl;
-                                } else {
-                                    std::cout << Color::color("[i] [Established]", Color::GREEN) <<" [S=" << receivedSegment->seqNum << "] ACKed" << std::endl;
-
-                                }
-
+                                std::cout << Color::color("[i] [Established]", Color::GREEN) <<" [S=" << receivedSegment->seqNum << "] ACKed" << std::endl;
+                                
                                 Segment segment = connection->generateSegmentsFromPayload(this->destPort);
                                 Segment ackSegment = ack(&segment, receivedSegment->seqNum, receivedSegment->seqNum + payloadSize);
 
@@ -242,6 +210,7 @@ void Client::run()
                                 std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [A=" << ackSegment.ackNum << "] Sent" << std::endl;
 
                                 if (receivedSegment->flags.fin) {
+                                    std::cout << Color::color("[i] [Established]", Color::GREEN) << "Received FIN flag from " << this->connection->getSenderIp() << ":" << receivedSegment->sourcePort << std::endl;
                                     // std::string str(fullBuffer.begin(), fullBuffer.end());
                                     // std::cout << "[i] fullBuffer content as string: " << str << std::endl;
                                     if (sendingFile) {
@@ -272,14 +241,11 @@ void Client::run()
                     {
                         // std::string receivedPayload(fullBuffer.begin(), fullBuffer.end());
 
-                        // if (receivedPayload.length() == 0)
                         if (receivedData.empty())
                         {
                             cout << Color::color("It seems like the server is not established yet", Color::RED) << endl;
                             connection->setStatus(SYN_RECEIVED);
                             connection->setRetryAttempt(connection->getRetryAttempt() + 1);
-
-                            isChangeStatus = 1;
 
                             break;
                         } 
@@ -350,7 +316,6 @@ void Client::run()
                 std::cout << Color::color("[i] [Closing]", Color::YELLOW) <<" [S=" << finAckSegment.seqNum << "] " << "[A=" << finAckSegment.ackNum << "] " <<  "Sending FIN-ACK request to " << this->destIP << ":" << this->destPort << std::endl;
 
                 connection->setStatus(LAST_ACK);
-                connection->setRetryAttempt(0);
                 
                 break;
             }

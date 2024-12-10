@@ -71,23 +71,6 @@ void Server::run()
                         // PINJAM STATE UNTUK RETRANSMIT
                         connection->setStatus(SYN_SENT);
                         connection->setRetryAttempt(0);
-
-                        // // Prepare and send a SYN-ACK packet
-                        // connection->setDataStream(nullptr); // Clear any previous data stream
-                        
-                        // Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
-
-                        // // SYN-ACK requires incrementing the received sequence number by 1
-                        // Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum + 1);
-
-                        // connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
-                        
-                        // std::cout << "[Handshake] [S=" << synAckSegment.seqNum << "] " << "[A=" << synAckSegment.ackNum << "] " <<  "Sending SYN-ACK request to " << this->connection->getSenderIp() << ":" << synAckSegment.destPort << std::endl;
-
-                        // connection->setStatus(SYN_RECEIVED);
-                        // connection->setRetryAttempt(0);
-
-                        // break;
                     }
                 }
             }
@@ -97,11 +80,9 @@ void Server::run()
         case SYN_SENT:
         {
             // Prepare and send a SYN-ACK packet
-            connection->setDataStream(nullptr, 0); // Clear any previous data stream
+            connection->setDataStream(nullptr, 0);
             
-            Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
-
-            // SYN-ACK requires incrementing the received sequence number by 1            
+            Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);        
             Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), connection->getCurrentAckNum(), sendingFile);
 
             connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
@@ -140,20 +121,9 @@ void Server::run()
             }
 
             // Since we didn't receive the expected ACK, we will retransmit the SYN-ACK packet
+            // Back to previous state
             connection->setStatus(SYN_SENT);
             connection->setRetryAttempt(this->connection->getRetryAttempt() + 1);
-
-            // std::this_thread::sleep_for(std::chrono::milliseconds(connection->getWaitRetransmitTime()));
-
-            // // Retransmit SYN-ACK packet
-            // connection->setDataStream(nullptr); // Clear any previous data stream
-            // Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
-
-            // // SYN-ACK requires incrementing the received sequence number by 1
-            // Segment synAckSegment = synAck(&segment, connection->getCurrentSeqNum(), receivedSegment->seqNum + 1);
-
-            // connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &synAckSegment, sizeof(synAckSegment));
-            // std::cout << "Server sent SYN-ACK packet to Client." << std::endl;
 
             break;
         }
@@ -186,7 +156,6 @@ void Server::run()
             // uint8_t* dataStream = new uint8_t[data.size() + 1];
             // memcpy(dataStream, data.c_str(), data.size() + 1);
 
-            // connection->setDataStream(dataStream);
             connection->setDataStream(data.data(), data.size());
 
             size_t dataSize = data.size();
@@ -243,19 +212,7 @@ void Server::run()
 
                     sentTimes[segment.seqNum] = std::chrono::steady_clock::now();
 
-                    // // Generate a random integer between 0 and RAND_MAX
-                    // int random_int = std::rand();
-
-                    // // Scale it to a probability between 0 and 1
-                    // double ploss = static_cast<double>(random_int) / RAND_MAX;
-
-                    // std::cout << ploss;                    
-                    // if (ploss < 0.9) {
-                        connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &segment, sizeof(segment));
-                    // } else {
-                    //     std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << segment.seqNum << "] NOT Sent" << std::endl;
-                    //     ploss -= 0.011;
-                    // }
+                    connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &segment, sizeof(segment));
                     
                     std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << segment.seqNum << "] Sent" << std::endl;
 
@@ -282,6 +239,7 @@ void Server::run()
                                 std::cout << Color::color("[i] All packets successfully acknowledged. Closing connection.", Color::YELLOW) << std::endl;
 
                                 connection->setStatus(FIN_WAIT_1);
+                                connection->setRetryAttempt(0);
                                 allAcked = true;
                                 break;
                             }
@@ -321,8 +279,6 @@ void Server::run()
             connection->setDataStream(nullptr, 0); // Clear any previous data stream
             
             Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
-
-            // FIN-ACK requires WITHOUT incrementing the received sequence number by 1
             Segment finSegment = fin(&segment, connection->getCurrentSeqNum(), connection->getCurrentAckNum());
 
             connection->send(this->connection->getSenderIp(), receivedSegment->sourcePort, &finSegment, sizeof(finSegment));
@@ -380,11 +336,9 @@ void Server::run()
         case LAST_ACK:
         {
             // Prepare and send a ACK packet
-            connection->setDataStream(nullptr, 0); // Clear any previous data stream
+            connection->setDataStream(nullptr, 0);
             
             Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
-
-            // ACK request requires incrementing the received sequence number by 1
             Segment ackSegment = ack(&segment, connection->getCurrentSeqNum(), connection->getCurrentAckNum());
             
             for (int i = 0; i < connection->getMaxRetries(); ++i) {
