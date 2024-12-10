@@ -174,7 +174,7 @@ void Server::run()
                     while (LFS - LAR > windowSize) {
                         std::cout << Color::color("[~] [Established]", Color::MAGENTA) << "Waiting for a free sliding window." << std::endl;
 
-                        receivedBytes = connection->recv(buffer, sizeof(buffer));
+                        receivedBytes = connection->recv(buffer, sizeof(buffer), 0);
                         while (receivedBytes > 0) {
                             receivedSegment = reinterpret_cast<Segment *>(buffer);
 
@@ -184,7 +184,7 @@ void Server::run()
                                 sentTimes.erase(receivedSegment->seqNum);
                             }
 
-                            receivedBytes = connection->recv(buffer, sizeof(buffer));
+                            receivedBytes = connection->recv(buffer, sizeof(buffer), 0);
                         }
                     }
 
@@ -192,6 +192,7 @@ void Server::run()
                     for (const auto& entry : sentTimes) {
                         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second).count() > connection->getWaitRetransmitTime()) {
                             std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << entry.first << "] not ACKed in time. Retransmitting." << std::endl;
+                            
                             currentIndex = entry.first - startingSeqNum;
                             connection->setCurrentSeqNum(entry.first);
                             LFS = connection->getCurrentSeqNum() - MAX_PAYLOAD_SIZE;
@@ -227,7 +228,7 @@ void Server::run()
                 bool needToRetransmit = false;
                 bool allAcked = false;
                 while (!needToRetransmit && !allAcked) {
-                    receivedBytes = connection->recv(buffer, sizeof(buffer));
+                    receivedBytes = connection->recv(buffer, sizeof(buffer), 0);
                     while (receivedBytes > 0) {
                         receivedSegment = reinterpret_cast<Segment *>(buffer);
                         if (receivedSegment->seqNum > LAR) {
@@ -244,13 +245,13 @@ void Server::run()
                                 break;
                             }
                         }
-                        receivedBytes = connection->recv(buffer, sizeof(buffer));
+                        receivedBytes = connection->recv(buffer, sizeof(buffer), 0);
                     }
                     
                     auto now = std::chrono::steady_clock::now();
                     for (const auto& entry : sentTimes) {
                         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - entry.second).count() > connection->getWaitRetransmitTime()) {
-                            std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << entry.first << "] not ACKed in time. Retransmitting." << std::endl;
+                            std::cout << Color::color("[i] [Established]", Color::YELLOW) <<" [S=" << entry.first << "] not ACKed in time. Retransmitting." << std::endl; 
                             connection->setRetryAttempt(connection->getRetryAttempt() + 1);
 
                             currentIndex = entry.first - startingSeqNum;
@@ -276,6 +277,7 @@ void Server::run()
         case FIN_WAIT_1:
         {
             // Prepare and send a FIN packet
+            std::this_thread::sleep_for(std::chrono::seconds(1));
             connection->setDataStream(nullptr, 0); // Clear any previous data stream
             
             Segment segment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
@@ -303,6 +305,13 @@ void Server::run()
         case CLOSING:
         {
             // Wait for FIN from the client
+            receivedBytes = connection->recv(buffer, sizeof(buffer));
+            receivedSegment = reinterpret_cast<Segment *>(buffer);
+            while (receivedBytes > 0 && !(!receivedSegment->flags.syn && receivedSegment->flags.ack && receivedSegment->flags.fin)) {
+                receivedBytes = connection->recv(buffer, sizeof(buffer), 10);
+                receivedSegment = reinterpret_cast<Segment *>(buffer);
+            }    
+            
             receivedBytes = connection->recv(buffer, sizeof(buffer));
             if (receivedBytes > 0)
             {

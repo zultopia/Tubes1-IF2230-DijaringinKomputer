@@ -9,6 +9,7 @@ Client::Client(std::string ip, int32_t port)
 {
     this->connection = new TCPSocket(ip, port);
     this->sendingFile = false;
+    std::srand(static_cast<unsigned int>(std::time(0)));
 }
 
 Client::~Client()
@@ -225,8 +226,10 @@ void Client::run()
                                     }else {
                                         // Print received text
                                         std::string receivedPayload(receivedData.begin(), receivedData.end());
-                                        std::cout << Color::color("[i] [Established]", Color::GREEN)
-                                                << "Received message: " << receivedPayload << std::endl;
+                                        std::cout << Color::color("[i] [Established]", Color::GREEN) << "Received message: " << receivedPayload << std::endl;
+                                        for (int i = 0; i < 10; i++) {
+                                            connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &ackSegment, sizeof(ackSegment));
+                                        }
                                     }
                                     connection->setStatus(FIN_WAIT_2);
                                     connection->setRetryAttempt(0);
@@ -260,6 +263,7 @@ void Client::run()
             }
             case FIN_WAIT_2:
             {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
                 cout << Color::color("[i] Client is in FIN_WAIT_2 state.", Color::YELLOW) << endl;
                 // Wait for FIN from the client
                 receivedBytes = connection->recv(buffer, sizeof(buffer));

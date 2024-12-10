@@ -2,8 +2,6 @@
 main
 ms
 mc
-*.pph
-*.ppc
 
 # Prerequisites
 *.d

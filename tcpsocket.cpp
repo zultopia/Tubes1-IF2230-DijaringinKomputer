@@ -94,7 +94,6 @@ void TCPSocket::send(string destIp, uint16_t destPort, void *packet, uint32_t pa
 // Receive data (non-blocking)
 int32_t TCPSocket::recv(void *buffer, uint32_t length, size_t duration)
 {
-    // sleep 300ms
     usleep(duration);
     if (buffer == nullptr || length == 0)
     {
