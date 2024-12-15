@@ -137,7 +137,9 @@ void Server::run()
                 Segment metadataSegment = connection->generateSegmentsFromPayload(receivedSegment->sourcePort);
                 Segment ackSegment = ack(&metadataSegment, connection->getCurrentSeqNum(), connection->getCurrentAckNum());
 
-                connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &metadataSegment, sizeof(metadataSegment));
+                for (int i = 0; i < 5; i++) {
+                        connection->send(connection->getSenderIp(), receivedSegment->sourcePort, &metadataSegment, sizeof(metadataSegment));
+                }
                 std::cout << Color::color("[i] [ESTABLISHED] Metadata sent: ", Color::YELLOW) << metadata << " [S="<< ackSegment.seqNum <<"]" << std::endl;
 
                 bool metadataAcked = false;
